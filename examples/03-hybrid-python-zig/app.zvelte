@@ -1,0 +1,112 @@
+<script lang="python" context="server">
+from datetime import datetime
+
+service_name = "Zvelte Hybrid Core"
+
+def get_server_status():
+    return f"Active on {datetime.now().strftime('%Y-%m-%d')}"
+</script>
+
+<script lang="zig" context="native">
+pub export fn zvelte_multiply(a: i32, b: i32) callconv(.c) i32 {
+    return a * b;
+}
+</script>
+
+<script lang="zig" context="wasm">
+pub export fn zvelte_cube(value: i32) callconv(.c) i32 {
+    return value * value * value;
+}
+</script>
+
+<state>
+multiplier: i32 = 2
+count: i32 = 10
+</state>
+
+<main>
+    <div class="container">
+        <h1>⚡ Zvelte Multi-Language Hybrid Example</h1>
+        <p class="status">{get_server_status()}</p>
+
+        <section class="card">
+            <h2>Client Reactive State</h2>
+            <p>Current count: <strong>{count}</strong></p>
+            <p>Multiplier factor: <strong>{multiplier}</strong></p>
+
+            <div class="btn-group">
+                <button class="btn" click={count++}>
+                    Increment Count
+                </button>
+                <button class="btn" click={multiplier++}>
+                    Increase Multiplier
+                </button>
+                <button class="btn btn-reset" click={count = 0}>
+                    Reset Count
+                </button>
+            </div>
+        </section>
+    </div>
+</main>
+
+<style>
+main {
+    font-family: system-ui, sans-serif;
+    background: #090d16;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+.container {
+    max-width: 36rem;
+    width: 100%;
+}
+h1 {
+    font-size: 1.6rem;
+    color: #38bdf8;
+    margin-bottom: 0.25rem;
+}
+.status {
+    color: #22c55e;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+}
+.card {
+    background: #131b2e;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 1.75rem;
+}
+.card h2 {
+    font-size: 1.15rem;
+    margin-top: 0;
+    color: #f1f5f9;
+}
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+}
+.btn {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.btn:hover {
+    background: #1d4ed8;
+}
+.btn-reset {
+    background: #475569;
+}
+.btn-reset:hover {
+    background: #334155;
+}
+</style>
