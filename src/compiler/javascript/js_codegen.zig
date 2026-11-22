@@ -43,6 +43,7 @@ pub const JsCodegen = struct {
     component: ast.Component,
     project_name: []const u8,
     var_id: usize,
+    in_dynamic_block: bool,
 
     pub fn init(allocator: Allocator, comp: ast.Component, project_name: []const u8) JsCodegen {
         return .{
@@ -50,6 +51,7 @@ pub const JsCodegen = struct {
             .component = comp,
             .project_name = project_name,
             .var_id = 0,
+            .in_dynamic_block = false,
         };
     }
 
@@ -57,6 +59,47 @@ pub const JsCodegen = struct {
         const id = self.var_id;
         self.var_id += 1;
         return std.fmt.allocPrint(self.allocator, "{s}_{d}", .{ prefix, id });
+    }
+
+    pub fn formatExpr(self: *JsCodegen, expr: []const u8) ![]const u8 {
+        var sb = StringBuilder.init(self.allocator);
+        var i: usize = 0;
+        while (i < expr.len) {
+            const c = expr[i];
+            if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_') {
+                const start = i;
+                while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or
+                    (expr[i] >= 'A' and expr[i] <= 'Z') or
+                    (expr[i] >= '0' and expr[i] <= '9') or
+                    expr[i] == '_'))
+                {
+                    i += 1;
+                }
+                const ident = expr[start..i];
+                const is_property_access = if (start > 0 and expr[start - 1] == '.') true else false;
+
+                var is_state = false;
+                if (!is_property_access) {
+                    for (self.component.states) |s| {
+                        if (std.mem.eql(u8, s.name, ident)) {
+                            is_state = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (is_state) {
+                    try sb.writeAll("state.");
+                    try sb.writeAll(ident);
+                } else {
+                    try sb.writeAll(ident);
+                }
+            } else {
+                try sb.list.append(self.allocator, c);
+                i += 1;
+            }
+        }
+        return sb.toOwnedSlice();
     }
 
     pub fn generateHtml(self: *JsCodegen) ![]const u8 {
@@ -165,19 +208,11 @@ pub const JsCodegen = struct {
             },
             .interpolation => {
                 const var_name = try self.nextVar("txt_dyn");
-                var is_state = false;
-                for (self.component.states) |s| {
-                    if (std.mem.eql(u8, s.name, node.content)) {
-                        is_state = true;
-                        break;
-                    }
-                }
+                const formatted = try self.formatExpr(node.content);
 
-                if (is_state) {
-                    try sb.print("    const {s} = document.createTextNode(state.{s});\n", .{ var_name, node.content });
-                    try sb.print("    subscribe(() => {{ {s}.data = state.{s}; }});\n", .{ var_name, node.content });
-                } else {
-                    try sb.print("    const {s} = document.createTextNode({s});\n", .{ var_name, node.content });
+                try sb.print("    const {s} = document.createTextNode({s});\n", .{ var_name, formatted });
+                if (!self.in_dynamic_block) {
+                    try sb.print("    subscribe(() => {{ {s}.data = {s}; }});\n", .{ var_name, formatted });
                 }
                 return var_name;
             },
@@ -190,17 +225,30 @@ pub const JsCodegen = struct {
                     try sb.print("    {s}.setAttribute(\"{s}\", \"{s}\");\n", .{ el_var, attr.name, attr.value });
                 }
 
+                // Two-way bindings
+                for (node.bindings) |bind| {
+                    if (std.mem.eql(u8, bind.property, "checked")) {
+                        try sb.print("    {s}.checked = state.{s};\n", .{ el_var, bind.variable });
+                        try sb.print("    subscribe(() => {{ if ({s}.checked !== state.{s}) {s}.checked = state.{s}; }});\n", .{
+                            el_var, bind.variable, el_var, bind.variable,
+                        });
+                        try sb.print("    {s}.addEventListener(\"change\", function(e) {{ state.{s} = e.target.checked; update(); }});\n", .{
+                            el_var, bind.variable,
+                        });
+                    } else {
+                        try sb.print("    {s}.value = state.{s};\n", .{ el_var, bind.variable });
+                        try sb.print("    subscribe(() => {{ if ({s}.value !== state.{s}) {s}.value = state.{s}; }});\n", .{
+                            el_var, bind.variable, el_var, bind.variable,
+                        });
+                        try sb.print("    {s}.addEventListener(\"input\", function(e) {{ state.{s} = e.target.value; update(); }});\n", .{
+                            el_var, bind.variable,
+                        });
+                    }
+                }
+
                 // Events
                 for (node.events) |evt| {
-                    const expr = evt.expression;
-                    var formatted_expr: []const u8 = expr;
-                    for (self.component.states) |s| {
-                        if (std.mem.startsWith(u8, expr, s.name)) {
-                            formatted_expr = try std.fmt.allocPrint(self.allocator, "state.{s}", .{expr});
-                            break;
-                        }
-                    }
-
+                    const formatted_expr = try self.formatExpr(evt.expression);
                     try sb.print("    {s}.addEventListener(\"{s}\", function() {{ {s}; update(); }});\n", .{
                         el_var,
                         evt.event_name,
@@ -215,6 +263,76 @@ pub const JsCodegen = struct {
                 }
 
                 return el_var;
+            },
+            .if_block => {
+                const if_container = try self.nextVar("if_cont");
+                const fn_name = try self.nextVar("update_if");
+                const formatted_cond = try self.formatExpr(node.content);
+
+                try sb.print("    const {s} = document.createElement(\"div\");\n", .{if_container});
+                try sb.print("    {s}.style.display = \"contents\";\n", .{if_container});
+
+                try sb.print("    function {s}() {{\n", .{fn_name});
+                try sb.print("      while ({s}.firstChild) {s}.removeChild({s}.firstChild);\n", .{ if_container, if_container, if_container });
+                try sb.print("      if ({s}) {{\n", .{formatted_cond});
+
+                const prev_dynamic = self.in_dynamic_block;
+                self.in_dynamic_block = true;
+
+                for (node.children) |child| {
+                    const child_var = try self.emitNode(sb, child);
+                    try sb.print("        {s}.appendChild({s});\n", .{ if_container, child_var });
+                }
+
+                if (node.else_children.len > 0) {
+                    try sb.writeAll("      } else {\n");
+                    for (node.else_children) |child| {
+                        const child_var = try self.emitNode(sb, child);
+                        try sb.print("        {s}.appendChild({s});\n", .{ if_container, child_var });
+                    }
+                }
+
+                self.in_dynamic_block = prev_dynamic;
+
+                try sb.writeAll("      }\n");
+                try sb.writeAll("    }\n");
+                try sb.print("    {s}();\n", .{fn_name});
+                try sb.print("    subscribe({s});\n", .{fn_name});
+
+                return if_container;
+            },
+            .each_block => {
+                const each_container = try self.nextVar("each_cont");
+                const fn_name = try self.nextVar("update_each");
+                const loop_idx = try self.nextVar("i");
+                const list_var = try self.nextVar("list");
+                const formatted_coll = try self.formatExpr(node.content);
+
+                try sb.print("    const {s} = document.createElement(\"div\");\n", .{each_container});
+                try sb.print("    {s}.style.display = \"contents\";\n", .{each_container});
+
+                try sb.print("    function {s}() {{\n", .{fn_name});
+                try sb.print("      while ({s}.firstChild) {s}.removeChild({s}.firstChild);\n", .{ each_container, each_container, each_container });
+                try sb.print("      const {s} = {s} || [];\n", .{ list_var, formatted_coll });
+                try sb.print("      for (let {s} = 0; {s} < {s}.length; {s}++) {{\n", .{ loop_idx, loop_idx, list_var, loop_idx });
+                try sb.print("        const {s} = {s}[{s}];\n", .{ node.item_name, list_var, loop_idx });
+
+                const prev_dynamic = self.in_dynamic_block;
+                self.in_dynamic_block = true;
+
+                for (node.children) |child| {
+                    const child_var = try self.emitNode(sb, child);
+                    try sb.print("        {s}.appendChild({s});\n", .{ each_container, child_var });
+                }
+
+                self.in_dynamic_block = prev_dynamic;
+
+                try sb.writeAll("      }\n");
+                try sb.writeAll("    }\n");
+                try sb.print("    {s}();\n", .{fn_name});
+                try sb.print("    subscribe({s});\n", .{fn_name});
+
+                return each_container;
             },
         }
     }
@@ -298,4 +416,85 @@ test "generate reactive counter js" {
     try std.testing.expect(std.mem.indexOf(u8, out.js, "count: 0") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.js, ".data = state.count;") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.js, "addEventListener(\"click\", function() { state.count++; update(); })") != null);
+}
+
+test "generate js with if-else conditional block" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../../source/parser.zig");
+
+    const src =
+        \\<state>
+        \\count: i32 = 10
+        \\</state>
+        \\<main>
+        \\  {#if count > 5}
+        \\    <p>High</p>
+        \\  {:else}
+        \\    <p>Low</p>
+        \\  {/if}
+        \\</main>
+    ;
+    var comp = try parser.parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    var out = try generate(allocator, comp, "if-app");
+    defer out.deinit(allocator);
+
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "display = \"contents\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "if (state.count > 5)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "High") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "Low") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "subscribe(update_if_") != null);
+}
+
+test "generate js with each block loop" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../../source/parser.zig");
+
+    const src =
+        \\<state>
+        \\items: []string = ["Alpha", "Beta"]
+        \\</state>
+        \\<main>
+        \\  {#each items as item}
+        \\    <div>{item}</div>
+        \\  {/each}
+        \\</main>
+    ;
+    var comp = try parser.parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    var out = try generate(allocator, comp, "each-app");
+    defer out.deinit(allocator);
+
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "const list_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "for (let i_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "const item = list_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "subscribe(update_each_") != null);
+}
+
+test "generate js with two-way form input bindings" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../../source/parser.zig");
+
+    const src =
+        \\<state>
+        \\username: string = "Alice"
+        \\agreed: bool = false
+        \\</state>
+        \\<main>
+        \\  <input type="text" bind:value={username} />
+        \\  <input type="checkbox" bind:checked={agreed} />
+        \\</main>
+    ;
+    var comp = try parser.parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    var out = try generate(allocator, comp, "bind-app");
+    defer out.deinit(allocator);
+
+    try std.testing.expect(std.mem.indexOf(u8, out.js, ".value = state.username;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "state.username = e.target.value; update();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, ".checked = state.agreed;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "state.agreed = e.target.checked; update();") != null);
 }

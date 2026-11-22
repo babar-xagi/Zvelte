@@ -11,6 +11,9 @@ pub const ParseError = error{
     UnterminatedStyle,
     InvalidStateDeclaration,
     MissingScriptAttribute,
+    UnterminatedIfBlock,
+    UnterminatedEachBlock,
+    InvalidEachSyntax,
     OutOfMemory,
 };
 
@@ -94,22 +97,26 @@ pub const Parser = struct {
                 try states.appendSlice(self.allocator, parsed_states);
             } else if (self.matchPrefix("<style>")) {
                 styles = try self.parseStyleBlock();
+            } else if (self.matchPrefix("{#if")) {
+                const node = try self.parseIfBlock();
+                try root_nodes.append(self.allocator, node);
+            } else if (self.matchPrefix("{#each")) {
+                const node = try self.parseEachBlock();
+                try root_nodes.append(self.allocator, node);
             } else if (self.peek() == '<') {
                 const node = try self.parseElement();
                 try root_nodes.append(self.allocator, node);
+            } else if (self.peek() == '{') {
+                const node = try self.parseInterpolation();
+                try root_nodes.append(self.allocator, node);
             } else {
-                if (self.peek() == '{') {
-                    const node = try self.parseInterpolation();
-                    try root_nodes.append(self.allocator, node);
-                } else {
-                    const text = try self.parseText();
-                    if (text.len > 0) {
-                        try root_nodes.append(self.allocator, .{
-                            .node_type = .text,
-                            .content = text,
-                            .line = self.line,
-                        });
-                    }
+                const text = try self.parseText();
+                if (text.len > 0) {
+                    try root_nodes.append(self.allocator, .{
+                        .node_type = .text,
+                        .content = text,
+                        .line = self.line,
+                    });
                 }
             }
         }
@@ -256,6 +263,7 @@ pub const Parser = struct {
 
         var attrs: std.ArrayList(ast.Attribute) = .empty;
         var events: std.ArrayList(ast.EventBinding) = .empty;
+        var bindings: std.ArrayList(ast.Binding) = .empty;
 
         var self_closing = false;
         while (self.pos < self.source.len) {
@@ -294,11 +302,19 @@ pub const Parser = struct {
                     const expr = self.source[expr_start..self.pos];
                     if (self.peek() == '}') _ = self.advance();
 
-                    try events.append(self.allocator, .{
-                        .event_name = attr_name,
-                        .expression = expr,
-                        .line = self.line,
-                    });
+                    if (std.mem.startsWith(u8, attr_name, "bind:")) {
+                        try bindings.append(self.allocator, .{
+                            .property = attr_name[5..],
+                            .variable = expr,
+                            .line = self.line,
+                        });
+                    } else {
+                        try events.append(self.allocator, .{
+                            .event_name = attr_name,
+                            .expression = expr,
+                            .line = self.line,
+                        });
+                    }
                 } else if (self.peek() == '"') {
                     _ = self.advance();
                     const val_start = self.pos;
@@ -309,10 +325,18 @@ pub const Parser = struct {
                     const val = self.source[val_start..self.pos];
                     if (self.peek() == '"') _ = self.advance();
 
-                    try attrs.append(self.allocator, .{
-                        .name = attr_name,
-                        .value = val,
-                    });
+                    if (std.mem.startsWith(u8, attr_name, "bind:")) {
+                        try bindings.append(self.allocator, .{
+                            .property = attr_name[5..],
+                            .variable = val,
+                            .line = self.line,
+                        });
+                    } else {
+                        try attrs.append(self.allocator, .{
+                            .name = attr_name,
+                            .value = val,
+                        });
+                    }
                 }
             } else {
                 try attrs.append(self.allocator, .{
@@ -333,32 +357,143 @@ pub const Parser = struct {
                 .tag = tag,
                 .attributes = try attrs.toOwnedSlice(self.allocator),
                 .events = try events.toOwnedSlice(self.allocator),
+                .bindings = try bindings.toOwnedSlice(self.allocator),
                 .children = &.{},
                 .line = start_line,
             };
         }
 
-        var children: std.ArrayList(ast.Node) = .empty;
         const close_tag_pattern = try std.fmt.allocPrint(self.allocator, "</{s}>", .{tag});
         defer self.allocator.free(close_tag_pattern);
 
+        const children = try self.parseNodesUntil(close_tag_pattern, null);
+        if (self.matchPrefix(close_tag_pattern)) {
+            _ = self.consumePrefix(close_tag_pattern);
+        }
+
+        return ast.Node{
+            .node_type = .element,
+            .tag = tag,
+            .attributes = try attrs.toOwnedSlice(self.allocator),
+            .events = try events.toOwnedSlice(self.allocator),
+            .bindings = try bindings.toOwnedSlice(self.allocator),
+            .children = children,
+            .line = start_line,
+        };
+    }
+
+    fn parseIfBlock(self: *Parser) ParseError!ast.Node {
+        const start_line = self.line;
+        _ = self.consumePrefix("{#if");
+        self.skipWhitespace();
+
+        const cond_start = self.pos;
+        while (self.peek()) |c| {
+            if (c == '}') break;
+            _ = self.advance();
+        }
+        if (self.peek() != '}') return ParseError.UnterminatedIfBlock;
+        const condition = std.mem.trim(u8, self.source[cond_start..self.pos], " \t\r\n");
+        _ = self.advance(); // consume }
+
+        const children = try self.parseNodesUntil("{:else}", "{/if}");
+
+        var else_children: []const ast.Node = &.{};
+        if (self.matchPrefix("{:else}")) {
+            _ = self.consumePrefix("{:else}");
+            else_children = try self.parseNodesUntil("{/if}", null);
+        }
+
+        if (!self.matchPrefix("{/if}")) {
+            return ParseError.UnterminatedIfBlock;
+        }
+        _ = self.consumePrefix("{/if}");
+
+        return ast.Node{
+            .node_type = .if_block,
+            .content = condition,
+            .children = children,
+            .else_children = else_children,
+            .line = start_line,
+        };
+    }
+
+    fn parseEachBlock(self: *Parser) ParseError!ast.Node {
+        const start_line = self.line;
+        _ = self.consumePrefix("{#each");
+        self.skipWhitespace();
+
+        const header_start = self.pos;
+        while (self.peek()) |c| {
+            if (c == '}') break;
+            _ = self.advance();
+        }
+        if (self.peek() != '}') return ParseError.UnterminatedEachBlock;
+        const header = std.mem.trim(u8, self.source[header_start..self.pos], " \t\r\n");
+        _ = self.advance(); // consume }
+
+        // Find " as "
+        const as_idx = std.mem.indexOf(u8, header, " as ") orelse return ParseError.InvalidEachSyntax;
+        const collection = std.mem.trim(u8, header[0..as_idx], " \t");
+        const rest = std.mem.trim(u8, header[as_idx + 4 ..], " \t");
+
+        var item_name = rest;
+        var key_name: []const u8 = "";
+
+        if (std.mem.indexOfScalar(u8, rest, '(')) |paren_open| {
+            item_name = std.mem.trim(u8, rest[0..paren_open], " \t");
+            if (std.mem.indexOfScalar(u8, rest, ')')) |paren_close| {
+                if (paren_close > paren_open) {
+                    key_name = std.mem.trim(u8, rest[paren_open + 1 .. paren_close], " \t");
+                }
+            }
+        }
+
+        const children = try self.parseNodesUntil("{/each}", null);
+
+        if (!self.matchPrefix("{/each}")) {
+            return ParseError.UnterminatedEachBlock;
+        }
+        _ = self.consumePrefix("{/each}");
+
+        return ast.Node{
+            .node_type = .each_block,
+            .content = collection,
+            .item_name = item_name,
+            .key_name = key_name,
+            .children = children,
+            .line = start_line,
+        };
+    }
+
+    fn parseNodesUntil(self: *Parser, stop_1: []const u8, stop_2: ?[]const u8) ParseError![]ast.Node {
+        var nodes: std.ArrayList(ast.Node) = .empty;
+
         while (self.pos < self.source.len) {
             self.skipWhitespace();
-            if (self.matchPrefix(close_tag_pattern)) {
-                _ = self.consumePrefix(close_tag_pattern);
-                break;
+            if (self.pos >= self.source.len) break;
+
+            if (stop_1.len > 0 and self.matchPrefix(stop_1)) break;
+            if (stop_2) |s2| {
+                if (s2.len > 0 and self.matchPrefix(s2)) break;
             }
 
-            if (self.peek() == '<') {
-                const child = try self.parseElement();
-                try children.append(self.allocator, child);
+            if (self.matchPrefix("{#if")) {
+                const if_node = try self.parseIfBlock();
+                try nodes.append(self.allocator, if_node);
+            } else if (self.matchPrefix("{#each")) {
+                const each_node = try self.parseEachBlock();
+                try nodes.append(self.allocator, each_node);
+            } else if (self.peek() == '<') {
+                const el_node = try self.parseElement();
+                try nodes.append(self.allocator, el_node);
             } else if (self.peek() == '{') {
-                const child = try self.parseInterpolation();
-                try children.append(self.allocator, child);
+                const interp_node = try self.parseInterpolation();
+                try nodes.append(self.allocator, interp_node);
             } else {
                 const text = try self.parseText();
                 if (text.len > 0) {
-                    try children.append(self.allocator, .{
+                    try nodes.append(self.allocator, .{
                         .node_type = .text,
                         .content = text,
                         .line = self.line,
@@ -367,14 +502,7 @@ pub const Parser = struct {
             }
         }
 
-        return ast.Node{
-            .node_type = .element,
-            .tag = tag,
-            .attributes = try attrs.toOwnedSlice(self.allocator),
-            .events = try events.toOwnedSlice(self.allocator),
-            .children = try children.toOwnedSlice(self.allocator),
-            .line = start_line,
-        };
+        return nodes.toOwnedSlice(self.allocator);
     }
 
     fn parseInterpolation(self: *Parser) ParseError!ast.Node {
@@ -495,4 +623,83 @@ test "parse full hybrid app.zvelte" {
     try std.testing.expectEqualStrings("main", comp.root_nodes[0].tag);
 
     try std.testing.expect(comp.styles.len > 0);
+}
+
+test "parse conditional if-else blocks" {
+    const allocator = std.testing.allocator;
+    const src =
+        \\{#if count > 5}
+        \\    <p class="high">High count</p>
+        \\{:else}
+        \\    <p class="low">Low count</p>
+        \\{/if}
+    ;
+
+    var comp = try parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), comp.root_nodes.len);
+    const if_node = comp.root_nodes[0];
+    try std.testing.expectEqual(ast.NodeType.if_block, if_node.node_type);
+    try std.testing.expectEqualStrings("count > 5", if_node.content);
+    try std.testing.expectEqual(@as(usize, 1), if_node.children.len);
+    try std.testing.expectEqualStrings("p", if_node.children[0].tag);
+    try std.testing.expectEqual(@as(usize, 1), if_node.else_children.len);
+    try std.testing.expectEqualStrings("p", if_node.else_children[0].tag);
+}
+
+test "parse each blocks with and without keys" {
+    const allocator = std.testing.allocator;
+    const src =
+        \\{#each items as item}
+        \\    <div>{item}</div>
+        \\{/each}
+        \\{#each todos as todo (todo.id)}
+        \\    <span>{todo.title}</span>
+        \\{/each}
+    ;
+
+    var comp = try parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), comp.root_nodes.len);
+
+    const each1 = comp.root_nodes[0];
+    try std.testing.expectEqual(ast.NodeType.each_block, each1.node_type);
+    try std.testing.expectEqualStrings("items", each1.content);
+    try std.testing.expectEqualStrings("item", each1.item_name);
+    try std.testing.expectEqualStrings("", each1.key_name);
+    try std.testing.expectEqual(@as(usize, 1), each1.children.len);
+
+    const each2 = comp.root_nodes[1];
+    try std.testing.expectEqual(ast.NodeType.each_block, each2.node_type);
+    try std.testing.expectEqualStrings("todos", each2.content);
+    try std.testing.expectEqualStrings("todo", each2.item_name);
+    try std.testing.expectEqualStrings("todo.id", each2.key_name);
+    try std.testing.expectEqual(@as(usize, 1), each2.children.len);
+}
+
+test "parse two-way form input bindings" {
+    const allocator = std.testing.allocator;
+    const src =
+        \\<input type="text" bind:value={task_name} />
+        \\<input type="checkbox" bind:checked={is_completed} />
+    ;
+
+    var comp = try parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), comp.root_nodes.len);
+
+    const input1 = comp.root_nodes[0];
+    try std.testing.expectEqualStrings("input", input1.tag);
+    try std.testing.expectEqual(@as(usize, 1), input1.bindings.len);
+    try std.testing.expectEqualStrings("value", input1.bindings[0].property);
+    try std.testing.expectEqualStrings("task_name", input1.bindings[0].variable);
+
+    const input2 = comp.root_nodes[1];
+    try std.testing.expectEqualStrings("input", input2.tag);
+    try std.testing.expectEqual(@as(usize, 1), input2.bindings.len);
+    try std.testing.expectEqualStrings("checked", input2.bindings[0].property);
+    try std.testing.expectEqualStrings("is_completed", input2.bindings[0].variable);
 }

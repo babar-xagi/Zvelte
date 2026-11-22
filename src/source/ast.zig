@@ -51,10 +51,18 @@ pub const EventBinding = struct {
     line: usize,
 };
 
+pub const Binding = struct {
+    property: []const u8, // "value", "checked"
+    variable: []const u8, // state variable name
+    line: usize = 0,
+};
+
 pub const NodeType = enum {
     element,
     text,
     interpolation,
+    if_block,
+    each_block,
 };
 
 pub const Node = struct {
@@ -62,8 +70,12 @@ pub const Node = struct {
     tag: []const u8 = "",
     attributes: []const Attribute = &.{},
     events: []const EventBinding = &.{},
+    bindings: []const Binding = &.{},
     children: []const Node = &.{},
-    content: []const u8 = "", // text or expression
+    else_children: []const Node = &.{},
+    content: []const u8 = "", // text, expression, condition, or collection
+    item_name: []const u8 = "", // loop variable in each_block
+    key_name: []const u8 = "",  // optional key expression in each_block
     line: usize = 0,
 };
 

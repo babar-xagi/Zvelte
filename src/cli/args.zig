@@ -10,7 +10,7 @@ const analyzer = @import("../semantic/analyzer.zig");
 const codegen = @import("../compiler/codegen.zig");
 const devserver = @import("../devserver/server.zig");
 
-pub const VERSION = "0.0.1";
+pub const VERSION = "0.0.2";
 
 pub fn printHelp() void {
     std.debug.print(

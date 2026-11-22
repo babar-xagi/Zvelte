@@ -9,8 +9,8 @@
 | Milestone | Target Scope | Status |
 |---|---|---|
 | **`v0.0.1`** | **CLI, Two-File Scaffolding, TOML Loader, SFC Parser, Fine-Grained Reactive JS Codegen, Embedded Dev Server** | **✅ Released** |
-| `v0.0.2` | Advanced Expression Parser, Conditional Rendering (`if`/`else`), Keyed List Rendering (`for`/`each`) | ⏳ Next |
-| `v0.0.3` | Python Server Worker Process Integration & RPC Bridge | 🗓️ Planned |
+| **`v0.0.2`** | **Advanced Expression Parser, Conditional Rendering (`if`/`else`), Keyed List Rendering (`for`/`each`), Two-Way Form Input Bindings (`bind:value`)** | **✅ Released** |
+| `v0.0.3` | Python Server Worker Process Integration & RPC Bridge | ⏳ Next |
 | `v0.0.4` | Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker | 🗓️ Planned |
 | `v0.0.5` | Zig Browser WebAssembly Compilation (`wasm32-freestanding`) & JS Host Adapter | 🗓️ Planned |
 | `v0.1.0` | Production Optimization, Benchmark Suite, Stable Core Release | 🎯 Milestone |
@@ -66,10 +66,12 @@
 
 ### Upcoming Phases (Post v0.0.1)
 
-#### Phase 8 — Template Language Essentials
-- [ ] Conditional rendering blocks (`{#if condition} ... {/if}`).
-- [ ] Keyed list rendering blocks (`{#each items as item (item.id)} ... {/each}`).
-- [ ] Form two-way input binding (`bind:value={name}`).
+#### Phase 8 — Template Language Essentials (v0.0.2)
+- [x] Conditional rendering blocks (`{#if condition} ... {:else} ... {/if}`).
+- [x] Keyed list rendering blocks (`{#each items as item (item.id)} ... {/each}`).
+- [x] Form two-way input binding (`bind:value={name}` and `bind:checked={flag}`).
+- [x] Advanced Expression Parser for state mutations, condition evaluations, and expressions.
+- [x] Extended `<state>` data type support for array/slice collections (`[]string`, `list`, `array`).
 
 #### Phase 9 — Zig Native Acceleration Modules
 - [ ] Auto-compile `<script lang="zig" context="native">` into host `.so` / `.dll`.

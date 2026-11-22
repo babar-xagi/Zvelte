@@ -9,6 +9,8 @@ pub const SemanticError = error{
     DuplicateStateVariable,
     UnsupportedStateType,
     UnknownStateInEvent,
+    UnknownStateInBinding,
+    UnknownCollectionInEach,
     OutOfMemory,
 };
 
@@ -63,7 +65,10 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
             std.mem.eql(u8, state.type_name, "f32") or
             std.mem.eql(u8, state.type_name, "f64") or
             std.mem.eql(u8, state.type_name, "bool") or
-            std.mem.eql(u8, state.type_name, "string");
+            std.mem.eql(u8, state.type_name, "string") or
+            std.mem.startsWith(u8, state.type_name, "[]") or
+            std.mem.eql(u8, state.type_name, "list") or
+            std.mem.eql(u8, state.type_name, "array");
 
         if (!valid_type) {
             return SemanticError.UnsupportedStateType;
@@ -72,9 +77,9 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
         try state_map.put(state.name, state);
     }
 
-    // 3. Check event expressions reference declared state variables
+    // 3. Check event expressions, bindings, and template nodes
     for (comp.root_nodes) |node| {
-        try validateNodeEvents(node, &state_map);
+        try validateNode(node, &state_map, null);
     }
 
     return SemanticModel{
@@ -84,7 +89,8 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
     };
 }
 
-fn validateNodeEvents(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar)) SemanticError!void {
+fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar), local_scope: ?[]const u8) SemanticError!void {
+    // Check events
     for (node.events) |evt| {
         // e.g. "count++" or "count = 0"
         var expr = std.mem.trim(u8, evt.expression, " \t\r\n");
@@ -99,14 +105,44 @@ fn validateNodeEvents(node: ast.Node, state_map: *const std.StringHashMap(ast.St
         }
         if (id_len > 0) {
             const var_name = expr[0..id_len];
-            if (!state_map.contains(var_name)) {
+            const is_local = if (local_scope) |ls| std.mem.eql(u8, var_name, ls) else false;
+            if (!state_map.contains(var_name) and !is_local) {
                 return SemanticError.UnknownStateInEvent;
             }
         }
     }
 
+    // Check bindings
+    for (node.bindings) |bind| {
+        if (!state_map.contains(bind.variable)) {
+            return SemanticError.UnknownStateInBinding;
+        }
+    }
+
+    // Check if_block
+    if (node.node_type == .if_block) {
+        for (node.children) |child| {
+            try validateNode(child, state_map, local_scope);
+        }
+        for (node.else_children) |child| {
+            try validateNode(child, state_map, local_scope);
+        }
+        return;
+    }
+
+    // Check each_block
+    if (node.node_type == .each_block) {
+        if (!state_map.contains(node.content)) {
+            return SemanticError.UnknownCollectionInEach;
+        }
+        for (node.children) |child| {
+            try validateNode(child, state_map, node.item_name);
+        }
+        return;
+    }
+
     for (node.children) |child| {
-        try validateNodeEvents(child, state_map);
+        try validateNode(child, state_map, local_scope);
     }
 }
 
@@ -172,4 +208,88 @@ test "semantic analysis rejects zig block in python-only mode" {
 
     const result = analyze(allocator, comp, cfg);
     try std.testing.expectError(SemanticError.ZigBlockNotAllowedInPythonMode, result);
+}
+
+test "semantic analysis validates if, each, and bindings" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../source/parser.zig");
+
+    const src =
+        \\<state>
+        \\todos: []string = ["Task 1", "Task 2"]
+        \\new_task: string = ""
+        \\is_done: bool = false
+        \\</state>
+        \\<main>
+        \\  <input type="text" bind:value={new_task} />
+        \\  <input type="checkbox" bind:checked={is_done} />
+        \\  {#if is_done}
+        \\    <p>Completed!</p>
+        \\  {:else}
+        \\    <p>Pending...</p>
+        \\  {/if}
+        \\  {#each todos as todo}
+        \\    <div>{todo}</div>
+        \\  {/each}
+        \\</main>
+    ;
+
+    var comp = try parser.parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    const toml_text =
+        \\[project]
+        \\name = "test-app"
+        \\[app]
+        \\mode = "hybrid"
+    ;
+    var cfg = try config.loadFromSource(allocator, toml_text);
+    defer cfg.deinit();
+
+    var model = try analyze(allocator, comp, cfg);
+    defer model.deinit(allocator);
+
+    try std.testing.expect(model.state_names.contains("todos"));
+    try std.testing.expect(model.state_names.contains("new_task"));
+    try std.testing.expect(model.state_names.contains("is_done"));
+}
+
+test "semantic analysis rejects unknown state in bind and each" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../source/parser.zig");
+
+    const src_bad_bind =
+        \\<main>
+        \\  <input bind:value={unknown_var} />
+        \\</main>
+    ;
+
+    var comp1 = try parser.parseComponent(allocator, src_bad_bind);
+    defer comp1.deinit(allocator);
+
+    const toml_text =
+        \\[project]
+        \\name = "test-app"
+        \\[app]
+        \\mode = "hybrid"
+    ;
+    var cfg = try config.loadFromSource(allocator, toml_text);
+    defer cfg.deinit();
+
+    const res1 = analyze(allocator, comp1, cfg);
+    try std.testing.expectError(SemanticError.UnknownStateInBinding, res1);
+
+    const src_bad_each =
+        \\<main>
+        \\  {#each non_existent_list as item}
+        \\    <p>{item}</p>
+        \\  {/each}
+        \\</main>
+    ;
+
+    var comp2 = try parser.parseComponent(allocator, src_bad_each);
+    defer comp2.deinit(allocator);
+
+    const res2 = analyze(allocator, comp2, cfg);
+    try std.testing.expectError(SemanticError.UnknownCollectionInEach, res2);
 }

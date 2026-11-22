@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.2] - 2026-11-22
+
+### ⚡ Template Language Essentials & Advanced Reactivity (Phase 8)
+
+#### ✨ Core Features
+- **Conditional Rendering Blocks (`{#if}` / `{:else}` / `{/if}`):** Supports conditional template rendering with `display: contents` wrapper containers and fine-grained subscriber recreation without Virtual DOM diffing.
+- **Keyed List Rendering Blocks (`{#each items as item}` / `{#each items as item (key)}`):** Dynamic loop iteration over reactive array collections in state, generating individual element templates with lexical scope preservation.
+- **Two-Way Form Input Bindings (`bind:value` / `bind:checked`):** Direct two-way synchronization on `<input>` elements with cursor stabilization checks (`el.value !== state.x`) preventing input jumping.
+- **Advanced Expression Parser:** Automatic lexical scoping for complex expressions, mathematical operations, array mutations (`todos.push(...)`), and ternary conditions, cleanly mapping state variables to reactive state properties.
+- **Extended State Types:** Added support for array/slice types (`[]string`, `[]i32`, `list`, `array`) in `<state>` blocks.
+- **Enhanced Example Application:** Updated `examples/02-todo-app` into a fully interactive task manager demonstrating dynamic list rendering, conditional completion banners, and two-way form input bindings.
+
+#### 🧪 Test Suite
+- New unit and semantic tests for template language essentials:
+  - Conditional if/else block parsing and AST validation.
+  - Keyed and unkeyed each block parsing and syntax error rejection.
+  - Two-way input binding parsing and unknown binding state variable rejection.
+  - Code generation verification for dynamic if/else wrappers, each loop iterators, and input event bindings.
+
+---
+
 ## [0.0.1] - 2026-11-21
 
 ### 🚀 Initial Framework Release

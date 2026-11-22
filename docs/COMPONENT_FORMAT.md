@@ -150,6 +150,42 @@ Attach interactive event listeners directly:
 <button click={count = 0}>Reset</button>
 ```
 
+### Conditional Rendering (`{#if}` / `{:else}`)
+Render elements conditionally based on state expressions:
+
+```html
+{#if count > 5}
+    <p class="highlight">Count is greater than 5!</p>
+{:else}
+    <p>Count is low.</p>
+{/if}
+```
+
+### Keyed List Rendering (`{#each}` blocks)
+Iterate over array/slice state variables dynamically:
+
+```html
+{#each items as item}
+    <div class="list-item">{item}</div>
+{/each}
+
+<!-- With key expression -->
+{#each todos as todo (todo.id)}
+    <div class="todo-item">{todo.title}</div>
+{/each}
+```
+
+### Two-Way Input Binding (`bind:value` & `bind:checked`)
+Synchronize form input elements directly with reactive state cells:
+
+```html
+<!-- Text input binding -->
+<input type="text" bind:value={user_name} />
+
+<!-- Checkbox boolean binding -->
+<input type="checkbox" bind:checked={is_completed} />
+```
+
 ---
 
 ## 🎨 4. Scoped Styles (`<style>`)
