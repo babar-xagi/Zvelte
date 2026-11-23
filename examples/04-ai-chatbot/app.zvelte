@@ -81,11 +81,11 @@ def ask_ai(prompt, provider="gemini"):
 </script>
 
 <state>
-user_prompt: string = "Explain how Zvelte bridges Python and Zig"
+user_prompt: string = "hi"
 ai_reply: string = ""
 is_loading: bool = false
 selected_model: string = "gemini"
-last_query: string = "Ready for your question"
+last_query: string = ""
 </state>
 
 <main>
@@ -115,13 +115,15 @@ last_query: string = "Ready for your question"
         </div>
 
         <section class="messages-container">
-            <div class="msg-card user">
-                <div class="avatar">👤</div>
-                <div class="content">
-                    <span class="role">Prompt:</span>
-                    <p>{last_query}</p>
+            {#if last_query}
+                <div class="msg-card user">
+                    <div class="avatar">👤</div>
+                    <div class="content">
+                        <span class="role">Prompt:</span>
+                        <p>{last_query}</p>
+                    </div>
                 </div>
-            </div>
+            {/if}
 
             {#if is_loading}
                 <div class="msg-card ai loading">
@@ -131,16 +133,16 @@ last_query: string = "Ready for your question"
                         <p class="pulse">Thinking & streaming from Python server...</p>
                     </div>
                 </div>
-            {:else}
-                {#if ai_reply}
-                    <div class="msg-card ai">
-                        <div class="avatar">⚡</div>
-                        <div class="content">
-                            <span class="role">AI Assistant ({selected_model})</span>
-                            <div class="bubble">{ai_reply}</div>
-                        </div>
+            {/if}
+
+            {#if ai_reply}
+                <div class="msg-card ai">
+                    <div class="avatar">⚡</div>
+                    <div class="content">
+                        <span class="role">AI Assistant ({selected_model})</span>
+                        <div class="bubble">{ai_reply}</div>
                     </div>
-                {/if}
+                </div>
             {/if}
         </section>
 

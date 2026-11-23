@@ -202,12 +202,12 @@ pub const JsCodegen = struct {
                 \\      const data = await response.json();
                 \\      if (data && data.error) {
                 \\        console.error("[Zvelte RPC Error]", data.error);
-                \\        return null;
+                \\        return "RPC Error: " + data.error;
                 \\      }
-                \\      return data ? data.result : null;
+                \\      return data ? data.result : "No response data";
                 \\    } catch (err) {
                 \\      console.error("[Zvelte RPC Network Error]", err);
-                \\      return null;
+                \\      return "Network Error: " + err;
                 \\    }
                 \\  }
                 \\  window.__zvelte_rpc = __zvelte_rpc;

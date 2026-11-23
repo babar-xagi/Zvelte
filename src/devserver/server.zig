@@ -90,6 +90,7 @@ pub const DevServer = struct {
                 const worker_path = ".zvelte/dev/worker.py";
                 const child = std.process.spawn(self.io, .{
                     .argv = &.{ "python3", "-u", worker_path },
+                    .cwd = .{ .dir = self.project_dir },
                     .stdin = .pipe,
                     .stdout = .pipe,
                 }) catch |err| blk: {
@@ -120,12 +121,47 @@ pub const DevServer = struct {
 
             req_count += 1;
 
-            var buf: [2048]u8 = undefined;
+            var req_list: std.ArrayList(u8) = .empty;
+            defer req_list.deinit(self.allocator);
+
+            var buf: [4096]u8 = undefined;
             const read_res = linux.read(client_fd, &buf, buf.len);
             if (isError(read_res) or read_res == 0) continue;
+            try req_list.appendSlice(self.allocator, buf[0..read_res]);
 
-            const req_str = buf[0..read_res];
-            try self.handleRequest(client_fd, req_str);
+            // If request has Content-Length, ensure full body is read
+            const initial_str = req_list.items;
+            if (std.mem.indexOf(u8, initial_str, "Content-Length: ")) |cl_idx| {
+                const after = initial_str[cl_idx + 16 ..];
+                var cl_end: usize = 0;
+                while (cl_end < after.len and after[cl_end] >= '0' and after[cl_end] <= '9') {
+                    cl_end += 1;
+                }
+                if (cl_end > 0) {
+                    const content_len = std.fmt.parseInt(usize, after[0..cl_end], 10) catch 0;
+                    const body_start_opt = if (std.mem.indexOf(u8, initial_str, "\r\n\r\n")) |idx|
+                        idx + 4
+                    else if (std.mem.indexOf(u8, initial_str, "\n\n")) |idx|
+                        idx + 2
+                    else
+                        null;
+
+                    if (body_start_opt) |body_start| {
+                        const current_body_len = initial_str.len - body_start;
+                        if (current_body_len < content_len) {
+                            var remaining = content_len - current_body_len;
+                            while (remaining > 0) {
+                                const n = linux.read(client_fd, &buf, @min(buf.len, remaining));
+                                if (isError(n) or n == 0) break;
+                                try req_list.appendSlice(self.allocator, buf[0..n]);
+                                remaining -= n;
+                            }
+                        }
+                    }
+                }
+            }
+
+            try self.handleRequest(client_fd, req_list.items);
         }
     }
 
@@ -142,7 +178,7 @@ pub const DevServer = struct {
             if (self.python_child == null) {
                 const err_body = "{\"error\": \"Python server worker is not running\"}";
                 const header = try std.fmt.allocPrint(self.allocator,
-                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
                     .{err_body.len},
                 );
                 defer self.allocator.free(header);
@@ -164,13 +200,22 @@ pub const DevServer = struct {
             try child.stdin.?.writeStreamingAll(self.io, req_body);
             try child.stdin.?.writeStreamingAll(self.io, "\n");
 
-            var resp_buf: [4096]u8 = undefined;
-            const n = child.stdout.?.readStreaming(self.io, &.{&resp_buf}) catch 0;
-            const resp_line = std.mem.trim(u8, resp_buf[0..n], " \r\n");
+            var resp_list: std.ArrayList(u8) = .empty;
+            defer resp_list.deinit(self.allocator);
+
+            var byte_buf: [1]u8 = undefined;
+            while (true) {
+                const n = child.stdout.?.readStreaming(self.io, &.{&byte_buf}) catch 0;
+                if (n == 0) break;
+                if (byte_buf[0] == '\n') break;
+                try resp_list.append(self.allocator, byte_buf[0]);
+            }
+
+            const resp_line = std.mem.trim(u8, resp_list.items, " \r\n");
             const resp_body = if (resp_line.len > 0) resp_line else "{\"error\": \"Empty response from Python worker\"}";
 
             const header = try std.fmt.allocPrint(self.allocator,
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
                 .{resp_body.len},
             );
             defer self.allocator.free(header);
