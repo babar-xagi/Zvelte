@@ -29,30 +29,46 @@ pub const DevServer = struct {
     python_child: ?std.process.Child = null,
 
     pub fn init(allocator: Allocator, io: Io, project_dir: Dir, host: []const u8, port: u16) ServerError!DevServer {
-        const fd_usize = linux.socket(linux.AF.INET, linux.SOCK.STREAM, 0);
-        if (isError(fd_usize)) {
-            return ServerError.SocketCreationFailed;
+        var active_port = port;
+        var bound = false;
+        var active_fd: linux.fd_t = undefined;
+
+        // Try requested port first, then automatically probe up to 10 fallback ports
+        for (0..10) |offset| {
+            const try_port: u16 = @intCast(port + @as(u16, @intCast(offset)));
+            const fd_usize = linux.socket(linux.AF.INET, linux.SOCK.STREAM, 0);
+            if (isError(fd_usize)) {
+                return ServerError.SocketCreationFailed;
+            }
+            const candidate_fd: linux.fd_t = @intCast(fd_usize);
+
+            // SO_REUSEADDR
+            const optval: c_int = 1;
+            _ = linux.setsockopt(candidate_fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, @ptrCast(&optval), @sizeOf(c_int));
+
+            var addr: linux.sockaddr.in = .{
+                .port = std.mem.nativeToBig(u16, try_port),
+                .addr = std.mem.nativeToBig(u32, 0x7f000001), // 127.0.0.1
+            };
+
+            const bind_res = linux.bind(candidate_fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.in));
+            if (!isError(bind_res)) {
+                const listen_res = linux.listen(candidate_fd, 128);
+                if (!isError(listen_res)) {
+                    active_fd = candidate_fd;
+                    active_port = try_port;
+                    bound = true;
+                    if (offset > 0) {
+                        std.debug.print("  \x1b[33m!\x1b[0m Port {d} is in use, automatically switched to \x1b[1m{d}\x1b[0m\n", .{ port, active_port });
+                    }
+                    break;
+                }
+            }
+            _ = linux.close(candidate_fd);
         }
-        const fd: linux.fd_t = @intCast(fd_usize);
-        errdefer _ = linux.close(fd);
 
-        // SO_REUSEADDR
-        const optval: c_int = 1;
-        _ = linux.setsockopt(fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, @ptrCast(&optval), @sizeOf(c_int));
-
-        var addr: linux.sockaddr.in = .{
-            .port = std.mem.nativeToBig(u16, port),
-            .addr = std.mem.nativeToBig(u32, 0x7f000001), // 127.0.0.1
-        };
-
-        const bind_res = linux.bind(fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.in));
-        if (isError(bind_res)) {
+        if (!bound) {
             return ServerError.BindFailed;
-        }
-
-        const listen_res = linux.listen(fd, 128);
-        if (isError(listen_res)) {
-            return ServerError.ListenFailed;
         }
 
         return DevServer{
@@ -60,8 +76,8 @@ pub const DevServer = struct {
             .io = io,
             .project_dir = project_dir,
             .host = host,
-            .port = port,
-            .socket_fd = fd,
+            .port = active_port,
+            .socket_fd = active_fd,
             .python_child = null,
         };
     }

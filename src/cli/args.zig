@@ -173,7 +173,20 @@ pub fn execute(allocator: Allocator, io: Io, args: []const []const u8) !void {
         };
         defer cfg.deinit();
 
-        var server = try devserver.DevServer.init(allocator, io, project_dir, cfg.dev.host, cfg.dev.port);
+        var server = devserver.DevServer.init(allocator, io, project_dir, cfg.dev.host, cfg.dev.port) catch |err| {
+            if (err == devserver.ServerError.BindFailed) {
+                std.debug.print(
+                    "\n\x1b[31merror:\x1b[0m Port {d} (and nearby fallback ports) are already in use on {s}.\n\n" ++
+                    "To fix this:\n" ++
+                    "  1. Change 'port = ...' under [dev] in your app.toml (e.g. port = 3001, 5000, or 8080).\n" ++
+                    "  2. Or stop the existing server/terminal process using port {d}.\n\n",
+                    .{ cfg.dev.port, cfg.dev.host, cfg.dev.port },
+                );
+            } else {
+                std.debug.print("\x1b[31merror:\x1b[0m failed to start dev server: {s}\n", .{@errorName(err)});
+            }
+            return err;
+        };
         defer server.deinit();
 
         try server.serve(null);
