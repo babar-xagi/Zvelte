@@ -17,6 +17,56 @@
 
 ---
 
+## 🤖 Live Showcase: AI Chatbot in a Single Component
+
+Build high-performance, AI-native web apps with Python and Google Gemini / OpenAI inside a single `.zvelte` component—with zero npm, zero pip dependencies, and zero API key leakage:
+
+<p align="center">
+  <img src="docs/assets/ai-chatbot-demo.png" alt="Zvelte AI Chatbot with Google Gemini" width="750" />
+</p>
+
+```html
+<!-- app.zvelte -->
+<script lang="python" context="server">
+import os, json, urllib.request
+
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+
+def ask_ai(prompt):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+    req = urllib.request.Request(url, data=json.dumps({"contents":[{"parts":[{"text": prompt}]}]}).encode("utf-8"), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode("utf-8"))["candidates"][0]["content"]["parts"][0]["text"]
+</script>
+
+<state>
+user_prompt: string = ""
+ai_reply: string = ""
+is_loading: bool = false
+</state>
+
+<main>
+    <input type="text" bind:value={user_prompt} placeholder="Ask Gemini anything..." />
+    <button click={
+        is_loading = true;
+        const p = user_prompt;
+        user_prompt = "";
+        ask_ai(p).then(res => { ai_reply = res; is_loading = false; update(); });
+    }>Send Prompt</button>
+
+    {#if is_loading}
+        <p>Thinking & streaming from Python server...</p>
+    {/if}
+    {#if ai_reply}
+        <div class="bubble">{ai_reply}</div>
+    {/if}
+</main>
+```
+
+> 🛡️ **Zero API Key Leakage:** `GEMINI_API_KEY` stays strictly in the isolated CPython worker process. It is never bundled or exposed in browser JavaScript assets. Run it with `cd examples/04-ai-chatbot && zvelte dev`!
+
+---
+
 ## 📚 Documentation & Guides
 
 - 🏗️ **[Architecture & Design Deep Dive](docs/ARCHITECTURE.md):** Complete internal pipeline and dataflow architecture.

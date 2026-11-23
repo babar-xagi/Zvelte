@@ -1,5 +1,9 @@
 # ⚡ Example 04: AI Chatbot (Google Gemini & OpenAI GPT-4o)
 
+<p align="center">
+  <img src="../../docs/assets/ai-chatbot-demo.png" alt="Zvelte AI Chatbot with Google Gemini" width="700" />
+</p>
+
 A complete AI-native single-file chatbot built with **Zvelte** and **Python**:
 - **Python Server RPC:** Live LLM inference using Google Gemini (`gemini-2.5-flash`) and OpenAI (`gpt-4o-mini`).
 - **Zero Secrets in Client Assets:** API keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`) stay strictly inside the CPython worker process.
