@@ -26,6 +26,7 @@ pub const DevServer = struct {
     host: []const u8,
     port: u16,
     socket_fd: linux.fd_t,
+    python_child: ?std.process.Child = null,
 
     pub fn init(allocator: Allocator, io: Io, project_dir: Dir, host: []const u8, port: u16) ServerError!DevServer {
         const fd_usize = linux.socket(linux.AF.INET, linux.SOCK.STREAM, 0);
@@ -61,16 +62,46 @@ pub const DevServer = struct {
             .host = host,
             .port = port,
             .socket_fd = fd,
+            .python_child = null,
         };
     }
 
     pub fn deinit(self: *DevServer) void {
+        if (self.python_child) |*child| {
+            child.kill(self.io);
+            _ = child.wait(self.io) catch {};
+            self.python_child = null;
+        }
         _ = linux.close(self.socket_fd);
     }
 
     pub fn serve(self: *DevServer, max_requests: ?usize) !void {
         // 1. Initial build to .zvelte/dev
         _ = try codegen.buildProject(self.allocator, self.io, self.project_dir, ".zvelte/dev");
+
+        // 2. Check and spawn Python worker if .zvelte/dev/worker.py exists
+        var dev_dir = self.project_dir.openDir(self.io, ".zvelte/dev", .{}) catch null;
+        if (dev_dir) |*d| {
+            defer d.close(self.io);
+            if (d.openFile(self.io, "worker.py", .{})) |wf| {
+                var worker_file = wf;
+                worker_file.close(self.io);
+
+                const worker_path = ".zvelte/dev/worker.py";
+                const child = std.process.spawn(self.io, .{
+                    .argv = &.{ "python3", "-u", worker_path },
+                    .stdin = .pipe,
+                    .stdout = .pipe,
+                }) catch |err| blk: {
+                    std.debug.print("  \x1b[33m!\x1b[0m Failed to spawn Python worker: {s}\n", .{@errorName(err)});
+                    break :blk null;
+                };
+                self.python_child = child;
+                if (self.python_child != null) {
+                    std.debug.print("  \x1b[32m✔\x1b[0m Python server worker supervisor online\n", .{});
+                }
+            } else |_| {}
+        }
 
         std.debug.print("\n  \x1b[32m✔\x1b[0m Zvelte dev server running at \x1b[1mhttp://{s}:{d}/\x1b[0m\n\n", .{
             self.host,
@@ -99,6 +130,56 @@ pub const DevServer = struct {
     }
 
     fn handleRequest(self: *DevServer, client_fd: linux.fd_t, req_str: []const u8) !void {
+        // Handle CORS preflight
+        if (std.mem.startsWith(u8, req_str, "OPTIONS ")) {
+            const cors = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n";
+            _ = linux.write(client_fd, cors, cors.len);
+            return;
+        }
+
+        // Handle Python Server RPC Bridge
+        if (std.mem.startsWith(u8, req_str, "POST /api/rpc")) {
+            if (self.python_child == null) {
+                const err_body = "{\"error\": \"Python server worker is not running\"}";
+                const header = try std.fmt.allocPrint(self.allocator,
+                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
+                    .{err_body.len},
+                );
+                defer self.allocator.free(header);
+                _ = linux.write(client_fd, header.ptr, header.len);
+                _ = linux.write(client_fd, err_body.ptr, err_body.len);
+                return;
+            }
+
+            const body_start = if (std.mem.indexOf(u8, req_str, "\r\n\r\n")) |idx|
+                idx + 4
+            else if (std.mem.indexOf(u8, req_str, "\n\n")) |idx|
+                idx + 2
+            else
+                req_str.len;
+
+            const req_body = std.mem.trim(u8, req_str[body_start..], " \r\n\t");
+
+            var child = &self.python_child.?;
+            try child.stdin.?.writeStreamingAll(self.io, req_body);
+            try child.stdin.?.writeStreamingAll(self.io, "\n");
+
+            var resp_buf: [4096]u8 = undefined;
+            const n = child.stdout.?.readStreaming(self.io, &.{&resp_buf}) catch 0;
+            const resp_line = std.mem.trim(u8, resp_buf[0..n], " \r\n");
+            const resp_body = if (resp_line.len > 0) resp_line else "{\"error\": \"Empty response from Python worker\"}";
+
+            const header = try std.fmt.allocPrint(self.allocator,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n",
+                .{resp_body.len},
+            );
+            defer self.allocator.free(header);
+
+            _ = linux.write(client_fd, header.ptr, header.len);
+            _ = linux.write(client_fd, resp_body.ptr, resp_body.len);
+            return;
+        }
+
         var path: []const u8 = "/";
         if (std.mem.startsWith(u8, req_str, "GET ")) {
             const start: usize = 4;

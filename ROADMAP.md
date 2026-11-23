@@ -10,8 +10,8 @@
 |---|---|---|
 | **`v0.0.1`** | **CLI, Two-File Scaffolding, TOML Loader, SFC Parser, Fine-Grained Reactive JS Codegen, Embedded Dev Server** | **✅ Released** |
 | **`v0.0.2`** | **Advanced Expression Parser, Conditional Rendering (`if`/`else`), Keyed List Rendering (`for`/`each`), Two-Way Form Input Bindings (`bind:value`)** | **✅ Released** |
-| `v0.0.3` | Python Server Worker Process Integration & RPC Bridge | ⏳ Next |
-| `v0.0.4` | Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker | 🗓️ Planned |
+| **`v0.0.3`** | **Python Server Worker Process Integration & Line-Buffered JSON-RPC IPC Bridge (Client Async Proxies & Promise-Aware Reactive Updates)** | **✅ Released** |
+| `v0.0.4` | Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker | ⏳ Next |
 | `v0.0.5` | Zig Browser WebAssembly Compilation (`wasm32-freestanding`) & JS Host Adapter | 🗓️ Planned |
 | `v0.1.0` | Production Optimization, Benchmark Suite, Stable Core Release | 🎯 Milestone |
 
@@ -78,10 +78,15 @@
 - [ ] C ABI memory safety boundary tests.
 - [ ] Automatic Python `ctypes` wrapper generator.
 
-#### Phase 10 — CPython Server Worker & Supervisor
-- [ ] Spawn and manage CPython worker process from Zig dev server.
-- [ ] JSON-RPC / IPC request-response bridge between web client and Python backend.
-- [ ] Clean process shutdown and worker restart on file change.
+#### Phase 10 — CPython Server Worker & Supervisor (v0.0.3)
+- [x] Auto-generate standard-library-only `worker.py` encapsulating user server functions with line-buffered JSON-RPC protocol.
+- [x] Spawn and supervise child CPython worker (`python3 -u`) from Zig dev server with non-blocking pipe I/O.
+- [x] HTTP JSON-RPC endpoint (`POST /api/rpc`) with CORS `OPTIONS` handling and sub-millisecond local dispatch.
+- [x] Client-side asynchronous JavaScript RPC proxy generator (`async function <fn_name>(...args)`) exposing Python functions globally.
+- [x] Promise-aware fine-grained text node reactivity (`__setNodeText`) resolving async Python returns directly into the DOM.
+- [x] Semantic analyzer validation permitting declared Python server functions in event expressions and bindings.
+- [x] Clean child process termination (SIGTERM / terminate) and pipe closure on dev server exit and error unwind.
+- [x] Production build pipeline integration emitting `worker.py` in `dist/` with detailed asset size reporting.
 
 #### Phase 11 — Zig WebAssembly Browser Modules
 - [ ] Auto-compile `<script lang="zig" context="wasm">` to WebAssembly.

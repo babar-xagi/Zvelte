@@ -19,5 +19,6 @@ test {
     _ = parser;
     _ = analyzer;
     _ = js_codegen;
+    _ = codegen;
     _ = devserver;
 }

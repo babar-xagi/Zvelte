@@ -10,7 +10,7 @@ const analyzer = @import("../semantic/analyzer.zig");
 const codegen = @import("../compiler/codegen.zig");
 const devserver = @import("../devserver/server.zig");
 
-pub const VERSION = "0.0.2";
+pub const VERSION = "0.0.3";
 
 pub fn printHelp() void {
     std.debug.print(
@@ -149,7 +149,12 @@ pub fn execute(allocator: Allocator, io: Io, args: []const []const u8) !void {
 
         std.debug.print("\x1b[32m✔\x1b[0m Production build complete in \x1b[1m{s}/\x1b[0m\n", .{res.output_dir});
         std.debug.print("  ├── index.html ({d} bytes)\n", .{res.html_bytes});
-        std.debug.print("  └── app.js ({d} bytes)\n", .{res.js_bytes});
+        if (res.worker_bytes > 0) {
+            std.debug.print("  ├── app.js ({d} bytes)\n", .{res.js_bytes});
+            std.debug.print("  └── worker.py ({d} bytes) [Python Server RPC]\n", .{res.worker_bytes});
+        } else {
+            std.debug.print("  └── app.js ({d} bytes)\n", .{res.js_bytes});
+        }
         return;
     }
 
@@ -179,10 +184,12 @@ pub fn execute(allocator: Allocator, io: Io, args: []const []const u8) !void {
         // Remove only Zvelte generated output
         project_dir.deleteFile(io, "dist/index.html") catch {};
         project_dir.deleteFile(io, "dist/app.js") catch {};
+        project_dir.deleteFile(io, "dist/worker.py") catch {};
         project_dir.deleteDir(io, "dist") catch {};
 
         project_dir.deleteFile(io, ".zvelte/dev/index.html") catch {};
         project_dir.deleteFile(io, ".zvelte/dev/app.js") catch {};
+        project_dir.deleteFile(io, ".zvelte/dev/worker.py") catch {};
         project_dir.deleteDir(io, ".zvelte/dev") catch {};
         project_dir.deleteDir(io, ".zvelte") catch {};
 

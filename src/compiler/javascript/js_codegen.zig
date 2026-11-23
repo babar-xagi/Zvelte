@@ -102,6 +102,24 @@ pub const JsCodegen = struct {
         return sb.toOwnedSlice();
     }
 
+    pub fn extractPythonFunctionNames(allocator: Allocator, code: []const u8) ![][]const u8 {
+        var names: std.ArrayList([]const u8) = .empty;
+        var lines_it = std.mem.splitScalar(u8, code, '\n');
+        while (lines_it.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            if (std.mem.startsWith(u8, line, "def ")) {
+                const rest = line[4..];
+                if (std.mem.indexOfScalar(u8, rest, '(')) |paren_idx| {
+                    const fn_name = std.mem.trim(u8, rest[0..paren_idx], " \t");
+                    if (fn_name.len > 0) {
+                        try names.append(allocator, fn_name);
+                    }
+                }
+            }
+        }
+        return names.toOwnedSlice(allocator);
+    }
+
     pub fn generateHtml(self: *JsCodegen) ![]const u8 {
         var style_block: []const u8 = "";
         if (self.component.styles.len > 0) {
@@ -163,14 +181,52 @@ pub const JsCodegen = struct {
         );
 
         // Server function bindings / fallbacks
+        var has_python_server = false;
         for (self.component.scripts) |script| {
-            if (script.lang == .python) {
-                try sb.writeAll(
-                    \\  function greeting() {
-                    \\    return "Hello Babbar";
-                    \\  }
-                    \\
-                );
+            if (script.lang == .python and script.context == .server) {
+                has_python_server = true;
+                break;
+            }
+        }
+
+        if (has_python_server) {
+            try sb.writeAll(
+                \\  // Zvelte Python Server RPC Bridge
+                \\  async function __zvelte_rpc(method, params) {
+                \\    try {
+                \\      const response = await fetch("/api/rpc", {
+                \\        method: "POST",
+                \\        headers: { "Content-Type": "application/json" },
+                \\        body: JSON.stringify({ method: method, params: params || [] })
+                \\      });
+                \\      const data = await response.json();
+                \\      if (data && data.error) {
+                \\        console.error("[Zvelte RPC Error]", data.error);
+                \\        return null;
+                \\      }
+                \\      return data ? data.result : null;
+                \\    } catch (err) {
+                \\      console.error("[Zvelte RPC Network Error]", err);
+                \\      return null;
+                \\    }
+                \\  }
+                \\  window.__zvelte_rpc = __zvelte_rpc;
+                \\
+            );
+
+            for (self.component.scripts) |script| {
+                if (script.lang == .python and script.context == .server) {
+                    const fn_names = try extractPythonFunctionNames(self.allocator, script.code);
+                    for (fn_names) |fn_name| {
+                        try sb.print(
+                            \\  async function {s}(...args) {{
+                            \\    return await __zvelte_rpc("{s}", args);
+                            \\  }}
+                            \\  window.{s} = {s};
+                            \\
+                        , .{ fn_name, fn_name, fn_name, fn_name });
+                    }
+                }
             }
         }
 
@@ -178,6 +234,14 @@ pub const JsCodegen = struct {
             \\  document.addEventListener("DOMContentLoaded", function() {
             \\    const root = document.getElementById("app");
             \\    if (!root) return;
+            \\
+            \\    function __setNodeText(node, val) {
+            \\      if (val && typeof val.then === "function") {
+            \\        val.then(res => { node.data = res != null ? res : ""; });
+            \\      } else {
+            \\        node.data = val != null ? val : "";
+            \\      }
+            \\    }
             \\
         );
 
@@ -210,9 +274,10 @@ pub const JsCodegen = struct {
                 const var_name = try self.nextVar("txt_dyn");
                 const formatted = try self.formatExpr(node.content);
 
-                try sb.print("    const {s} = document.createTextNode({s});\n", .{ var_name, formatted });
+                try sb.print("    const {s} = document.createTextNode(\"\");\n", .{var_name});
+                try sb.print("    __setNodeText({s}, {s});\n", .{ var_name, formatted });
                 if (!self.in_dynamic_block) {
-                    try sb.print("    subscribe(() => {{ {s}.data = {s}; }});\n", .{ var_name, formatted });
+                    try sb.print("    subscribe(() => {{ __setNodeText({s}, {s}); }});\n", .{ var_name, formatted });
                 }
                 return var_name;
             },
@@ -414,7 +479,8 @@ test "generate reactive counter js" {
     defer out.deinit(allocator);
 
     try std.testing.expect(std.mem.indexOf(u8, out.js, "count: 0") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.js, ".data = state.count;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "__setNodeText(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "state.count") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.js, "addEventListener(\"click\", function() { state.count++; update(); })") != null);
 }
 
@@ -497,4 +563,32 @@ test "generate js with two-way form input bindings" {
     try std.testing.expect(std.mem.indexOf(u8, out.js, "state.username = e.target.value; update();") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.js, ".checked = state.agreed;") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.js, "state.agreed = e.target.checked; update();") != null);
+}
+
+test "generate python rpc bridge and proxies" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../../source/parser.zig");
+
+    const src =
+        \\<script lang="python" context="server">
+        \\def ask_ai(prompt):
+        \\    return f"AI: {prompt}"
+        \\def greeting():
+        \\    return "Hello from server"
+        \\</script>
+        \\<main>
+        \\  <h1>{greeting()}</h1>
+        \\</main>
+    ;
+    var comp = try parser.parseComponent(allocator, src);
+    defer comp.deinit(allocator);
+
+    var out = try generate(allocator, comp, "py-app");
+    defer out.deinit(allocator);
+
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "__zvelte_rpc(method, params)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "fetch(\"/api/rpc\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "async function ask_ai(...args)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "async function greeting(...args)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.js, "__setNodeText(") != null);
 }

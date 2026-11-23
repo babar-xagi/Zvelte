@@ -1,10 +1,17 @@
 <script lang="python" context="server">
 from datetime import datetime
+import math
 
-service_name = "Zvelte Hybrid Core"
+service_name = "Zvelte AI Core"
 
 def get_server_status():
-    return f"Active on {datetime.now().strftime('%Y-%m-%d')}"
+    return f"Python Server Online (CPython {datetime.now().strftime('%H:%M:%S')})"
+
+def ask_ai(prompt):
+    return f"AI Neural Result: Analysis of '{prompt}' completed with confidence 0.98."
+
+def compute_factorial(n):
+    return f"{n}! = {math.factorial(int(n))}"
 </script>
 
 <script lang="zig" context="native">
@@ -22,12 +29,27 @@ pub export fn zvelte_cube(value: i32) callconv(.c) i32 {
 <state>
 multiplier: i32 = 2
 count: i32 = 10
+user_prompt: string = "Summarize market trends"
+ai_result: string = ""
 </state>
 
 <main>
     <div class="container">
         <h1>⚡ Zvelte Multi-Language Hybrid Example</h1>
         <p class="status">{get_server_status()}</p>
+
+        <section class="card server-card">
+            <h2>🐍 Python Server RPC & AI Engine</h2>
+            <div class="rpc-input">
+                <input type="text" class="input-text" bind:value={user_prompt} placeholder="Ask Python AI..." />
+                <button class="btn btn-ai" click={ask_ai(user_prompt).then(res => { ai_result = res; update(); })}>
+                    Run Python AI
+                </button>
+            </div>
+            {#if ai_result}
+                <div class="ai-box">{ai_result}</div>
+            {/if}
+        </section>
 
         <section class="card">
             <h2>Client Reactive State</h2>
@@ -79,11 +101,41 @@ h1 {
     border: 1px solid #1e293b;
     border-radius: 12px;
     padding: 1.75rem;
+    margin-bottom: 1.25rem;
 }
 .card h2 {
     font-size: 1.15rem;
     margin-top: 0;
     color: #f1f5f9;
+}
+.rpc-input {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.input-text {
+    flex: 1;
+    background: #090d16;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    padding: 0.6rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+.btn-ai {
+    background: #059669;
+}
+.btn-ai:hover {
+    background: #047857;
+}
+.ai-box {
+    background: #064e3b;
+    border: 1px solid #059669;
+    color: #a7f3d0;
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.4;
 }
 .btn-group {
     display: flex;

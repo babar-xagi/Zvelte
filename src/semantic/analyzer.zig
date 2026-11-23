@@ -18,12 +18,66 @@ pub const SemanticModel = struct {
     arena: *std.heap.ArenaAllocator,
     component: ast.Component,
     state_names: std.StringHashMap(ast.StateVar),
+    func_names: std.StringHashMap(void),
 
     pub fn deinit(self: *SemanticModel, child_allocator: Allocator) void {
         self.arena.deinit();
         child_allocator.destroy(self.arena);
     }
 };
+
+fn isBuiltin(name: []const u8) bool {
+    const builtins = [_][]const u8{
+        "update",
+        "console",
+        "alert",
+        "fetch",
+        "window",
+        "document",
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+    };
+    for (builtins) |b| {
+        if (std.mem.eql(u8, name, b)) return true;
+    }
+    return false;
+}
+
+fn extractScriptFunctions(allocator: Allocator, script: ast.ScriptBlock, func_map: *std.StringHashMap(void)) !void {
+    _ = allocator;
+    var lines_it = std.mem.splitScalar(u8, script.code, '\n');
+    while (lines_it.next()) |raw_line| {
+        const line = std.mem.trim(u8, raw_line, " \t\r");
+        if (script.lang == .python) {
+            var rest: ?[]const u8 = null;
+            if (std.mem.startsWith(u8, line, "def ")) {
+                rest = line[4..];
+            } else if (std.mem.startsWith(u8, line, "async def ")) {
+                rest = line[10..];
+            }
+            if (rest) |r| {
+                if (std.mem.indexOfScalar(u8, r, '(')) |paren_idx| {
+                    const fn_name = std.mem.trim(u8, r[0..paren_idx], " \t");
+                    if (fn_name.len > 0) {
+                        try func_map.put(fn_name, {});
+                    }
+                }
+            }
+        } else if (script.lang == .zig) {
+            if (std.mem.indexOf(u8, line, "fn ")) |fn_idx| {
+                const after_fn = line[fn_idx + 3 ..];
+                if (std.mem.indexOfScalar(u8, after_fn, '(')) |paren_idx| {
+                    const fn_name = std.mem.trim(u8, after_fn[0..paren_idx], " \t");
+                    if (fn_name.len > 0) {
+                        try func_map.put(fn_name, {});
+                    }
+                }
+            }
+        }
+    }
+}
 
 pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppConfig) SemanticError!SemanticModel {
     const arena = try child_allocator.create(std.heap.ArenaAllocator);
@@ -77,22 +131,29 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
         try state_map.put(state.name, state);
     }
 
-    // 3. Check event expressions, bindings, and template nodes
+    // 3. Extract declared functions from scripts
+    var func_map = std.StringHashMap(void).init(alloc);
+    for (comp.scripts) |script| {
+        try extractScriptFunctions(alloc, script, &func_map);
+    }
+
+    // 4. Check event expressions, bindings, and template nodes
     for (comp.root_nodes) |node| {
-        try validateNode(node, &state_map, null);
+        try validateNode(node, &state_map, &func_map, null);
     }
 
     return SemanticModel{
         .arena = arena,
         .component = comp,
         .state_names = state_map,
+        .func_names = func_map,
     };
 }
 
-fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar), local_scope: ?[]const u8) SemanticError!void {
+fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar), func_map: *const std.StringHashMap(void), local_scope: ?[]const u8) SemanticError!void {
     // Check events
     for (node.events) |evt| {
-        // e.g. "count++" or "count = 0"
+        // e.g. "count++" or "count = 0" or "ask_ai(user_prompt)"
         var expr = std.mem.trim(u8, evt.expression, " \t\r\n");
         // extract identifier prefix
         var id_len: usize = 0;
@@ -106,7 +167,8 @@ fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar
         if (id_len > 0) {
             const var_name = expr[0..id_len];
             const is_local = if (local_scope) |ls| std.mem.eql(u8, var_name, ls) else false;
-            if (!state_map.contains(var_name) and !is_local) {
+            const is_known_func = func_map.contains(var_name) or isBuiltin(var_name);
+            if (!state_map.contains(var_name) and !is_known_func and !is_local) {
                 return SemanticError.UnknownStateInEvent;
             }
         }
@@ -122,10 +184,10 @@ fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar
     // Check if_block
     if (node.node_type == .if_block) {
         for (node.children) |child| {
-            try validateNode(child, state_map, local_scope);
+            try validateNode(child, state_map, func_map, local_scope);
         }
         for (node.else_children) |child| {
-            try validateNode(child, state_map, local_scope);
+            try validateNode(child, state_map, func_map, local_scope);
         }
         return;
     }
@@ -136,13 +198,13 @@ fn validateNode(node: ast.Node, state_map: *const std.StringHashMap(ast.StateVar
             return SemanticError.UnknownCollectionInEach;
         }
         for (node.children) |child| {
-            try validateNode(child, state_map, node.item_name);
+            try validateNode(child, state_map, func_map, node.item_name);
         }
         return;
     }
 
     for (node.children) |child| {
-        try validateNode(child, state_map, local_scope);
+        try validateNode(child, state_map, func_map, local_scope);
     }
 }
 
@@ -292,4 +354,55 @@ test "semantic analysis rejects unknown state in bind and each" {
 
     const res2 = analyze(allocator, comp2, cfg);
     try std.testing.expectError(SemanticError.UnknownCollectionInEach, res2);
+}
+
+test "semantic analysis permits declared python server functions in event expressions" {
+    const allocator = std.testing.allocator;
+    const parser = @import("../source/parser.zig");
+
+    const src_valid_rpc =
+        \\<script lang="python" context="server">
+        \\def ask_ai(prompt):
+        \\    return "Analysis: " + prompt
+        \\</script>
+        \\<state>
+        \\query: string = "hello"
+        \\ans: string = ""
+        \\</state>
+        \\<main>
+        \\  <button click={ask_ai(query)}>Run AI</button>
+        \\</main>
+    ;
+
+    var comp = try parser.parseComponent(allocator, src_valid_rpc);
+    defer comp.deinit(allocator);
+
+    const toml_text =
+        \\[project]
+        \\name = "ai-test"
+        \\[app]
+        \\mode = "hybrid"
+    ;
+    var cfg = try config.loadFromSource(allocator, toml_text);
+    defer cfg.deinit();
+
+    var model = try analyze(allocator, comp, cfg);
+    defer model.deinit(allocator);
+
+    try std.testing.expect(model.func_names.contains("ask_ai"));
+
+    const src_bad_event =
+        \\<state>
+        \\query: string = "hello"
+        \\</state>
+        \\<main>
+        \\  <button click={undefined_action(query)}>Run</button>
+        \\</main>
+    ;
+
+    var comp_bad = try parser.parseComponent(allocator, src_bad_event);
+    defer comp_bad.deinit(allocator);
+
+    const bad_res = analyze(allocator, comp_bad, cfg);
+    try std.testing.expectError(SemanticError.UnknownStateInEvent, bad_res);
 }

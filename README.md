@@ -4,7 +4,7 @@
 
 [![Zig 0.17.1](https://img.shields.io/badge/Zig-0.17.1-orange.svg)](https://ziglang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release: v0.0.2](https://img.shields.io/badge/Release-v0.0.2-green.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.2)
+[![Release: v0.0.3](https://img.shields.io/badge/Release-v0.0.3-green.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.3)
 
 ---
 

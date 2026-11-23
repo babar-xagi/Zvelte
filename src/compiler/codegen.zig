@@ -12,7 +12,63 @@ pub const BuildResult = struct {
     output_dir: []const u8,
     html_bytes: usize,
     js_bytes: usize,
+    worker_bytes: usize = 0,
 };
+
+pub fn generatePythonWorker(allocator: Allocator, user_code: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(allocator,
+        \\#!/usr/bin/env python3
+        \\import sys
+        \\import json
+        \\import traceback
+        \\
+        \\# === Zvelte User Python Server Logic ===
+        \\{s}
+        \\# =======================================
+        \\
+        \\def handle_rpc(payload):
+        \\    method = payload.get("method")
+        \\    params = payload.get("params", [])
+        \\    if not method:
+        \\        return {{"error": "Missing 'method' in RPC request"}}
+        \\    func = globals().get(method)
+        \\    if not func or not callable(func):
+        \\        return {{"error": f"Function '{{method}}' not found on Python server"}}
+        \\    try:
+        \\        if isinstance(params, list):
+        \\            res = func(*params)
+        \\        elif isinstance(params, dict):
+        \\            res = func(**params)
+        \\        else:
+        \\            res = func(params)
+        \\        return {{"result": res}}
+        \\    except Exception as e:
+        \\        return {{"error": str(e), "traceback": traceback.format_exc()}}
+        \\
+        \\def main():
+        \\    while True:
+        \\        line = sys.stdin.readline()
+        \\        if not line:
+        \\            break
+        \\        line = line.strip()
+        \\        if not line:
+        \\            continue
+        \\        try:
+        \\            req = json.loads(line)
+        \\            res = handle_rpc(req)
+        \\            if "id" in req:
+        \\                res["id"] = req["id"]
+        \\            sys.stdout.write(json.dumps(res) + "\n")
+        \\            sys.stdout.flush()
+        \\        except Exception as err:
+        \\            sys.stdout.write(json.dumps({{"error": str(err)}}) + "\n")
+        \\            sys.stdout.flush()
+        \\
+        \\if __name__ == "__main__":
+        \\    main()
+        \\
+    , .{user_code});
+}
 
 pub fn buildProject(
     allocator: Allocator,
@@ -58,9 +114,74 @@ pub fn buildProject(
     defer js_file.close(io);
     try js_file.writeStreamingAll(io, out.js);
 
+    var worker_bytes: usize = 0;
+    // Write worker.py if python server scripts exist
+    for (comp.scripts) |script| {
+        if (script.lang == .python and script.context == .server) {
+            const worker_code = try generatePythonWorker(allocator, script.code);
+            defer allocator.free(worker_code);
+
+            var worker_file = try out_dir.createFile(io, "worker.py", .{});
+            defer worker_file.close(io);
+            try worker_file.writeStreamingAll(io, worker_code);
+            worker_bytes = worker_code.len;
+            break;
+        }
+    }
+
     return BuildResult{
         .output_dir = output_dir_name,
         .html_bytes = out.html.len,
         .js_bytes = out.js.len,
+        .worker_bytes = worker_bytes,
     };
+}
+
+test "generate python worker script" {
+    const allocator = std.testing.allocator;
+    const user_code = "def greeting(): return 'Hello from test'";
+    const worker = try generatePythonWorker(allocator, user_code);
+    defer allocator.free(worker);
+
+    try std.testing.expect(std.mem.indexOf(u8, worker, "def handle_rpc(payload):") != null);
+    try std.testing.expect(std.mem.indexOf(u8, worker, "def greeting(): return 'Hello from test'") != null);
+    try std.testing.expect(std.mem.indexOf(u8, worker, "sys.stdin.readline()") != null);
+}
+
+test "python worker rpc execution" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    const user_code =
+        \\def add(a, b):
+        \\    return int(a) + int(b)
+        \\def greet(name):
+        \\    return f"Welcome {name}!"
+    ;
+    const worker_code = try generatePythonWorker(allocator, user_code);
+    defer allocator.free(worker_code);
+
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ "python3", "-u", "-c", worker_code },
+        .stdin = .pipe,
+        .stdout = .pipe,
+    });
+    defer child.kill(io);
+
+    // Call add(15, 25)
+    try child.stdin.?.writeStreamingAll(io, "{\"method\": \"add\", \"params\": [15, 25]}\n");
+    var buf1: [256]u8 = undefined;
+    const n1 = try child.stdout.?.readStreaming(io, &.{&buf1});
+    try std.testing.expect(std.mem.indexOf(u8, buf1[0..n1], "{\"result\": 40}") != null);
+
+    // Call greet("Alice")
+    try child.stdin.?.writeStreamingAll(io, "{\"method\": \"greet\", \"params\": [\"Alice\"]}\n");
+    var buf2: [256]u8 = undefined;
+    const n2 = try child.stdout.?.readStreaming(io, &.{&buf2});
+    try std.testing.expect(std.mem.indexOf(u8, buf2[0..n2], "{\"result\": \"Welcome Alice!\"}") != null);
+
+    // Call unknown method
+    try child.stdin.?.writeStreamingAll(io, "{\"method\": \"non_existent\", \"params\": []}\n");
+    var buf3: [256]u8 = undefined;
+    const n3 = try child.stdout.?.readStreaming(io, &.{&buf3});
+    try std.testing.expect(std.mem.indexOf(u8, buf3[0..n3], "Function 'non_existent' not found") != null);
 }

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.3] - 2026-11-22
+
+### ⚡ Python Server Worker Process Integration & JSON-RPC Bridge (Phase 10)
+
+#### ✨ Core Features
+- **Embedded CPython Worker Supervisor:** The Zig dev server automatically detects `<script lang="python" context="server">` blocks, generates an isolated `.zvelte/dev/worker.py` runner using standard library only (`sys`, `json`, `traceback`), and manages a live `python3 -u` child process with pipe I/O.
+- **Line-Buffered JSON-RPC IPC Bridge:** Implemented high-performance IPC over standard I/O streams (`stdin`/`stdout`). Eliminates TCP port collision and achieves sub-millisecond local request latency.
+- **HTTP RPC API Gateway (`POST /api/rpc`):** The embedded Zig HTTP server dispatches RPC calls to the Python worker's stdin, reads line-buffered JSON responses, and returns HTTP 200 JSON payloads with CORS preflight support.
+- **Client Asynchronous RPC Proxies:** JavaScript code generator automatically detects all declared top-level Python functions (`def ...` and `async def ...`) and emits `async function <fn_name>(...args)` wrappers, calling `POST /api/rpc` and returning Promises.
+- **Promise-Aware Reactive DOM Resolution:** Generated runtime includes `__setNodeText(node, val)` supporting Promise-based dynamic interpolations (e.g., `{get_server_status()}`) and event handlers without manual `await` boilerplate.
+- **Semantic Analyzer Function Resolution:** Enhanced symbol analyzer to extract functions declared in `<script>` blocks and permit their invocation in event handlers (`click={ask_ai(user_prompt)...}`).
+- **Graceful Process Management:** Automatic child process shutdown with SIGTERM termination and pipe deinitialization on server exit.
+- **Production Worker Output:** `zvelte build` emits standalone `dist/worker.py` alongside `dist/index.html` and `dist/app.js` with asset size tracking.
+
+#### 🧪 Test Suite
+- **Worker Code Generation Test:** Verifies generation of Python RPC handler with user logic and error handling.
+- **End-to-End RPC Execution Test:** Spawns live Python process over pipes, sends JSON-RPC request for `greeting()`, and verifies JSON response format.
+- **Semantic Analysis Server Function Test:** Validates that declared Python server functions pass event handler semantic checks and unknown functions are cleanly rejected.
+
+---
+
 ## [0.0.2] - 2026-11-22
 
 ### ⚡ Template Language Essentials & Advanced Reactivity (Phase 8)

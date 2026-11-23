@@ -37,22 +37,41 @@ Every `.zvelte` component is organized into clean, dedicated sections:
 All `<script>` tags must explicitly declare both `lang` and `context`. Zvelte does not guess or assume script semantics.
 
 ### Python Server Script (`lang="python" context="server"`)
-Executes inside a CPython host worker. Ideal for database interactions, AI model pipelines, and backend routing.
+Executes inside a managed CPython host worker supervisor. Ideal for database interactions, AI model pipelines (e.g. PyTorch, HuggingFace, llama-cpp-python), data science, and backend calculations.
 
 ```html
 <script lang="python" context="server">
 from datetime import datetime
+import json
 
-user = "Developer"
+def ask_ai(prompt):
+    # Any Python library, LLM call, or model pipeline can run here!
+    return f"AI Response to '{prompt}': completed with high confidence."
 
-def get_welcome_message():
-    current_time = datetime.now().strftime("%H:%M")
-    return f"Welcome {user}! Current time: {current_time}"
+def compute_factorial(n):
+    import math
+    return f"{n}! = {math.factorial(int(n))}"
 </script>
 ```
 
+#### How the RPC Bridge Works:
+1. **Compilation / Supervisor:** Zvelte extracts this code and generates a line-buffered JSON-RPC runner (`worker.py`). The Zig dev server launches it as a supervised child process (`python3 -u`).
+2. **Client Async Proxies:** The compiler generates browser JavaScript `async function ask_ai(...args)` proxies on `window`.
+3. **HTTP Dispatch:** Calling `ask_ai("my prompt")` triggers a lightweight `POST /api/rpc` JSON request to the Zig server, which pipes it directly to Python's `stdin` and streams the JSON response back.
+4. **Direct Reactive DOM Updates:** In event handlers and interpolations, results can be bound to reactive `<state>` variables or rendered directly into DOM text nodes via Promise resolution (`__setNodeText`).
+
+```html
+<main>
+    <input type="text" bind:value={prompt} />
+    <button click={ask_ai(prompt).then(res => { reply = res; update(); })}>
+        Analyze with Python
+    </button>
+    <p>{reply}</p>
+</main>
+```
+
 > [!NOTE]
-> Server Python code is executed strictly on the server side. It is never bundled or leaked into the browser JavaScript assets.
+> Server Python code is executed strictly on the server side in the CPython process. Proprietary logic, API keys, and model weights are never bundled or exposed in browser JavaScript assets.
 
 ---
 
