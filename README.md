@@ -93,6 +93,8 @@ Browse working example applications in the [`examples/`](examples/) directory:
 
 ## 🚀 Quick Start
 
+> 🪟 **Windows Users:** See the dedicated [Windows Setup and User Guide](docs/WINDOWS_SETUP.md) for step-by-step PowerShell installation and troubleshooting.
+
 ### Installation
 
 ```bash

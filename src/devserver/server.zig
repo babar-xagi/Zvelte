@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Dir = std.Io.Dir;
-const linux = std.os.linux;
+const net = std.Io.net;
 
 const codegen = @import("../compiler/codegen.zig");
 
@@ -14,57 +14,35 @@ pub const ServerError = error{
     BuildFailed,
 } || Allocator.Error || std.Io.Dir.CreateDirPathError || std.Io.Dir.OpenError || std.Io.File.OpenError;
 
-fn isError(res: usize) bool {
-    const s: isize = @bitCast(res);
-    return s < 0;
-}
-
 pub const DevServer = struct {
     allocator: Allocator,
     io: Io,
     project_dir: Dir,
     host: []const u8,
     port: u16,
-    socket_fd: linux.fd_t,
+    server: net.Server,
     python_child: ?std.process.Child = null,
 
     pub fn init(allocator: Allocator, io: Io, project_dir: Dir, host: []const u8, port: u16) ServerError!DevServer {
         var active_port = port;
         var bound = false;
-        var active_fd: linux.fd_t = undefined;
+        var active_server: net.Server = undefined;
 
         // Try requested port first, then automatically probe up to 10 fallback ports
         for (0..10) |offset| {
             const try_port: u16 = @intCast(port + @as(u16, @intCast(offset)));
-            const fd_usize = linux.socket(linux.AF.INET, linux.SOCK.STREAM, 0);
-            if (isError(fd_usize)) {
-                return ServerError.SocketCreationFailed;
+            var addr_buf: [64]u8 = undefined;
+            const addr_str = std.fmt.bufPrint(&addr_buf, "{s}:{d}", .{ host, try_port }) catch continue;
+            const addr = net.IpAddress.parseLiteral(addr_str) catch continue;
+
+            const srv = addr.listen(io, .{ .reuse_address = true }) catch continue;
+            active_server = srv;
+            active_port = try_port;
+            bound = true;
+            if (offset > 0) {
+                std.debug.print("  \x1b[33m!\x1b[0m Port {d} is in use, automatically switched to \x1b[1m{d}\x1b[0m\n", .{ port, active_port });
             }
-            const candidate_fd: linux.fd_t = @intCast(fd_usize);
-
-            // SO_REUSEADDR
-            const optval: c_int = 1;
-            _ = linux.setsockopt(candidate_fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, @ptrCast(&optval), @sizeOf(c_int));
-
-            var addr: linux.sockaddr.in = .{
-                .port = std.mem.nativeToBig(u16, try_port),
-                .addr = std.mem.nativeToBig(u32, 0x7f000001), // 127.0.0.1
-            };
-
-            const bind_res = linux.bind(candidate_fd, @ptrCast(&addr), @sizeOf(linux.sockaddr.in));
-            if (!isError(bind_res)) {
-                const listen_res = linux.listen(candidate_fd, 128);
-                if (!isError(listen_res)) {
-                    active_fd = candidate_fd;
-                    active_port = try_port;
-                    bound = true;
-                    if (offset > 0) {
-                        std.debug.print("  \x1b[33m!\x1b[0m Port {d} is in use, automatically switched to \x1b[1m{d}\x1b[0m\n", .{ port, active_port });
-                    }
-                    break;
-                }
-            }
-            _ = linux.close(candidate_fd);
+            break;
         }
 
         if (!bound) {
@@ -77,7 +55,7 @@ pub const DevServer = struct {
             .project_dir = project_dir,
             .host = host,
             .port = active_port,
-            .socket_fd = active_fd,
+            .server = active_server,
             .python_child = null,
         };
     }
@@ -88,7 +66,14 @@ pub const DevServer = struct {
             _ = child.wait(self.io) catch {};
             self.python_child = null;
         }
-        _ = linux.close(self.socket_fd);
+        self.server.deinit(self.io);
+    }
+
+    fn writeStream(stream: *net.Stream, io: Io, data: []const u8) void {
+        var write_buf: [1024]u8 = undefined;
+        var writer = net.Stream.Writer.init(stream.*, io, &write_buf);
+        writer.interface.writeAll(data) catch return;
+        writer.interface.flush() catch return;
     }
 
     pub fn serve(self: *DevServer, max_requests: ?usize) !void {
@@ -104,14 +89,22 @@ pub const DevServer = struct {
                 worker_file.close(self.io);
 
                 const worker_path = ".zvelte/dev/worker.py";
+                // Try python3 first, fallback to python (common on Windows)
                 const child = std.process.spawn(self.io, .{
                     .argv = &.{ "python3", "-u", worker_path },
                     .cwd = .{ .dir = self.project_dir },
                     .stdin = .pipe,
                     .stdout = .pipe,
-                }) catch |err| blk: {
-                    std.debug.print("  \x1b[33m!\x1b[0m Failed to spawn Python worker: {s}\n", .{@errorName(err)});
-                    break :blk null;
+                }) catch |err| switch (err) {
+                    error.FileNotFound => blk: {
+                        break :blk std.process.spawn(self.io, .{
+                            .argv = &.{ "python", "-u", worker_path },
+                            .cwd = .{ .dir = self.project_dir },
+                            .stdin = .pipe,
+                            .stdout = .pipe,
+                        }) catch null;
+                    },
+                    else => null,
                 };
                 self.python_child = child;
                 if (self.python_child != null) {
@@ -127,13 +120,11 @@ pub const DevServer = struct {
 
         var req_count: usize = 0;
         while (max_requests == null or req_count < max_requests.?) {
-            var client_addr: linux.sockaddr = undefined;
-            var client_len: linux.socklen_t = @sizeOf(linux.sockaddr);
-
-            const client_res = linux.accept(self.socket_fd, &client_addr, &client_len);
-            if (isError(client_res)) continue;
-            const client_fd: linux.fd_t = @intCast(client_res);
-            defer _ = linux.close(client_fd);
+            var stream = self.server.accept(self.io) catch |err| {
+                if (err == error.Canceled) break;
+                continue;
+            };
+            defer stream.close(self.io);
 
             req_count += 1;
 
@@ -141,9 +132,10 @@ pub const DevServer = struct {
             defer req_list.deinit(self.allocator);
 
             var buf: [4096]u8 = undefined;
-            const read_res = linux.read(client_fd, &buf, buf.len);
-            if (isError(read_res) or read_res == 0) continue;
-            try req_list.appendSlice(self.allocator, buf[0..read_res]);
+            var slices: [1][]u8 = .{&buf};
+            const read_len = stream.read(self.io, &slices) catch continue;
+            if (read_len == 0) continue;
+            try req_list.appendSlice(self.allocator, buf[0..read_len]);
 
             // If request has Content-Length, ensure full body is read
             const initial_str = req_list.items;
@@ -167,8 +159,10 @@ pub const DevServer = struct {
                         if (current_body_len < content_len) {
                             var remaining = content_len - current_body_len;
                             while (remaining > 0) {
-                                const n = linux.read(client_fd, &buf, @min(buf.len, remaining));
-                                if (isError(n) or n == 0) break;
+                                const chunk_size = @min(buf.len, remaining);
+                                var chunk_slices: [1][]u8 = .{buf[0..chunk_size]};
+                                const n = stream.read(self.io, &chunk_slices) catch 0;
+                                if (n == 0) break;
                                 try req_list.appendSlice(self.allocator, buf[0..n]);
                                 remaining -= n;
                             }
@@ -177,15 +171,15 @@ pub const DevServer = struct {
                 }
             }
 
-            try self.handleRequest(client_fd, req_list.items);
+            try self.handleRequest(&stream, req_list.items);
         }
     }
 
-    fn handleRequest(self: *DevServer, client_fd: linux.fd_t, req_str: []const u8) !void {
+    fn handleRequest(self: *DevServer, stream: *net.Stream, req_str: []const u8) !void {
         // Handle CORS preflight
         if (std.mem.startsWith(u8, req_str, "OPTIONS ")) {
             const cors = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n";
-            _ = linux.write(client_fd, cors, cors.len);
+            writeStream(stream, self.io, cors);
             return;
         }
 
@@ -198,8 +192,8 @@ pub const DevServer = struct {
                     .{err_body.len},
                 );
                 defer self.allocator.free(header);
-                _ = linux.write(client_fd, header.ptr, header.len);
-                _ = linux.write(client_fd, err_body.ptr, err_body.len);
+                writeStream(stream, self.io, header);
+                writeStream(stream, self.io, err_body);
                 return;
             }
 
@@ -236,8 +230,8 @@ pub const DevServer = struct {
             );
             defer self.allocator.free(header);
 
-            _ = linux.write(client_fd, header.ptr, header.len);
-            _ = linux.write(client_fd, resp_body.ptr, resp_body.len);
+            writeStream(stream, self.io, header);
+            writeStream(stream, self.io, resp_body);
             return;
         }
 
@@ -256,7 +250,7 @@ pub const DevServer = struct {
 
         if (std.mem.eql(u8, path, "/") or std.mem.eql(u8, path, "/index.html")) {
             const content = dev_dir.readFileAlloc(self.io, "index.html", self.allocator, .unlimited) catch {
-                _ = linux.write(client_fd, "HTTP/1.1 500 Internal Error\r\n\r\n", 31);
+                writeStream(stream, self.io, "HTTP/1.1 500 Internal Error\r\n\r\n");
                 return;
             };
             defer self.allocator.free(content);
@@ -267,11 +261,11 @@ pub const DevServer = struct {
             );
             defer self.allocator.free(header);
 
-            _ = linux.write(client_fd, header.ptr, header.len);
-            _ = linux.write(client_fd, content.ptr, content.len);
+            writeStream(stream, self.io, header);
+            writeStream(stream, self.io, content);
         } else if (std.mem.eql(u8, path, "/app.js")) {
             const content = dev_dir.readFileAlloc(self.io, "app.js", self.allocator, .unlimited) catch {
-                _ = linux.write(client_fd, "HTTP/1.1 500 Internal Error\r\n\r\n", 31);
+                writeStream(stream, self.io, "HTTP/1.1 500 Internal Error\r\n\r\n");
                 return;
             };
             defer self.allocator.free(content);
@@ -282,11 +276,11 @@ pub const DevServer = struct {
             );
             defer self.allocator.free(header);
 
-            _ = linux.write(client_fd, header.ptr, header.len);
-            _ = linux.write(client_fd, content.ptr, content.len);
+            writeStream(stream, self.io, header);
+            writeStream(stream, self.io, content);
         } else {
             const not_found = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
-            _ = linux.write(client_fd, not_found.ptr, not_found.len);
+            writeStream(stream, self.io, not_found);
         }
     }
 };
@@ -299,5 +293,5 @@ test "dev server binds and initializes" {
     var server = try DevServer.init(allocator, io, cwd, "127.0.0.1", 3099);
     defer server.deinit();
 
-    try std.testing.expect(server.socket_fd > 0);
+    try std.testing.expect(server.port >= 3099);
 }
