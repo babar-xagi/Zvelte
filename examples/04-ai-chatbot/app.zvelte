@@ -1,0 +1,321 @@
+<script lang="python" context="server">
+import os
+import json
+import urllib.request
+import urllib.error
+
+# In Zvelte, API keys remain strictly secure on the server.
+# They are never bundled into client-side JavaScript!
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
+
+def call_gemini(prompt):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        candidates = data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if parts:
+                return parts[0].get("text", "No text returned by Gemini.")
+        return "Empty response from Gemini."
+
+def call_openai(prompt):
+    url = "https://api.openai.com/v1/chat/completions"
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are a helpful, fast, and concise AI assistant built with Zvelte."},
+            {"role": "user", "content": prompt}
+        ]
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_KEY}"
+        }
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"]
+
+def ask_ai(prompt, provider="gemini"):
+    # If API keys are set in environment, invoke real live LLM
+    try:
+        if provider == "gemini" and GEMINI_KEY:
+            return call_gemini(prompt)
+        elif provider == "openai" and OPENAI_KEY:
+            return call_openai(prompt)
+    except Exception as e:
+        return f"Error contacting {provider.upper()} API: {str(e)}"
+
+    # Zero-config intelligent fallback simulation if no key is provided
+    provider_name = "Google Gemini" if provider == "gemini" else "OpenAI GPT-4o"
+    key_name = "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
+    return f"[{provider_name} Simulation]\nResponse to: '{prompt}'\n\n💡 Tip: Export {key_name} in your terminal (e.g. export {key_name}='your-key') to connect to the live AI model!"
+</script>
+
+<state>
+user_prompt: string = "Explain how Zvelte bridges Python and Zig"
+ai_reply: string = ""
+is_loading: bool = false
+selected_model: string = "gemini"
+last_query: string = "Ready for your question"
+</state>
+
+<main>
+    <div class="chat-container">
+        <header class="chat-header">
+            <div class="logo">
+                <span class="icon">⚡</span>
+                <div>
+                    <h1>Zvelte AI Chatbot</h1>
+                    <p class="subtitle">Multi-Language AI Assistant powered by Python RPC</p>
+                </div>
+            </div>
+            <div class="badge">CPython IPC Active</div>
+        </header>
+
+        <div class="provider-bar">
+            <span class="label">Select AI Provider:</span>
+            <div class="pill-group">
+                <button class="pill" click={selected_model = "gemini"}>
+                    ✨ Google Gemini
+                </button>
+                <button class="pill" click={selected_model = "openai"}>
+                    🤖 OpenAI GPT-4o
+                </button>
+            </div>
+            <span class="active-tag">Model: <strong>{selected_model}</strong></span>
+        </div>
+
+        <section class="messages-container">
+            <div class="msg-card user">
+                <div class="avatar">👤</div>
+                <div class="content">
+                    <span class="role">Prompt:</span>
+                    <p>{last_query}</p>
+                </div>
+            </div>
+
+            {#if is_loading}
+                <div class="msg-card ai loading">
+                    <div class="avatar">⚡</div>
+                    <div class="content">
+                        <span class="role">AI Assistant</span>
+                        <p class="pulse">Thinking & streaming from Python server...</p>
+                    </div>
+                </div>
+            {:else}
+                {#if ai_reply}
+                    <div class="msg-card ai">
+                        <div class="avatar">⚡</div>
+                        <div class="content">
+                            <span class="role">AI Assistant ({selected_model})</span>
+                            <div class="bubble">{ai_reply}</div>
+                        </div>
+                    </div>
+                {/if}
+            {/if}
+        </section>
+
+        <footer class="input-bar">
+            <input 
+                type="text" 
+                class="chat-input" 
+                placeholder="Ask Gemini or OpenAI anything..." 
+                bind:value={user_prompt} 
+            />
+            <button class="btn-send" click={
+                is_loading = true;
+                last_query = user_prompt;
+                const p = user_prompt;
+                user_prompt = "";
+                ask_ai(p, selected_model).then(res => {
+                    ai_reply = res;
+                    is_loading = false;
+                    update();
+                });
+            }>
+                Send Prompt
+            </button>
+        </footer>
+    </div>
+</main>
+
+<style>
+main {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #090d16;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+}
+.chat-container {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    max-width: 48rem;
+    width: 100%;
+    padding: 2rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #1f2937;
+    padding-bottom: 1rem;
+}
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.icon {
+    font-size: 2rem;
+}
+h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #38bdf8;
+    margin: 0;
+}
+.subtitle {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin: 0;
+}
+.badge {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.provider-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    background: #1a2234;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+}
+.label {
+    font-size: 0.85rem;
+    color: #cbd5e1;
+}
+.pill-group {
+    display: flex;
+    gap: 0.5rem;
+}
+.pill {
+    background: #0f172a;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.pill:hover {
+    border-color: #38bdf8;
+}
+.active-tag {
+    font-size: 0.85rem;
+    color: #38bdf8;
+    margin-left: auto;
+}
+.messages-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    min-height: 18rem;
+}
+.msg-card {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 12px;
+}
+.msg-card.user {
+    background: #1e293b;
+    border-left: 4px solid #38bdf8;
+}
+.msg-card.ai {
+    background: #162032;
+    border-left: 4px solid #22c55e;
+}
+.avatar {
+    font-size: 1.4rem;
+}
+.content {
+    flex: 1;
+}
+.role {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+.bubble {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: #f1f5f9;
+    white-space: pre-wrap;
+}
+.pulse {
+    color: #38bdf8;
+    font-style: italic;
+}
+.input-bar {
+    display: flex;
+    gap: 0.75rem;
+}
+.chat-input {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    outline: none;
+}
+.chat-input:focus {
+    border-color: #38bdf8;
+}
+.btn-send {
+    background: #0284c7;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+.btn-send:hover {
+    background: #0369a1;
+}
+</style>

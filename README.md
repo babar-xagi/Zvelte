@@ -37,6 +37,7 @@ Browse working example applications in the [`examples/`](examples/) directory:
 - ⚡ **[01-counter](examples/01-counter/):** Pure reactive client counter with increment, decrement, and reset.
 - 📝 **[02-todo-app](examples/02-todo-app/):** Task manager illustrating multiple state variables and card layout.
 - 🐍 **[03-hybrid-python-zig](examples/03-hybrid-python-zig/):** Multi-language hybrid app with Python server logic, Zig native functions, and WASM blocks.
+- 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini 2.0 & OpenAI GPT-4o with server-side API keys and zero pip dependencies.
 
 ---
 

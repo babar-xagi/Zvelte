@@ -1,0 +1,12 @@
+[project]
+name = "ai-chatbot"
+version = "0.1.0"
+entry = "app.zvelte"
+
+[app]
+mode = "hybrid"
+renderer = "js"
+
+[dev]
+host = "127.0.0.1"
+port = 3004
