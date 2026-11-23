@@ -12,11 +12,29 @@ def ask_ai(prompt):
 
 def compute_factorial(n):
     return f"{n}! = {math.factorial(int(n))}"
+
+def benchmark_native_fib(n):
+    # Calls compiled Zig shared library via ctypes at machine code speed!
+    val = zvelte_fast_fib(int(n))
+    return f"Zig Native Fibonacci({n}) = {val} (sub-microsecond execution)"
 </script>
 
 <script lang="zig" context="native">
 pub export fn zvelte_multiply(a: i32, b: i32) callconv(.c) i32 {
     return a * b;
+}
+
+pub export fn zvelte_fast_fib(n: u32) callconv(.c) u64 {
+    if (n <= 1) return n;
+    var a: u64 = 0;
+    var b: u64 = 1;
+    var i: u32 = 2;
+    while (i <= n) : (i += 1) {
+        const next = a + b;
+        a = b;
+        b = next;
+    }
+    return b;
 }
 </script>
 
@@ -31,12 +49,31 @@ multiplier: i32 = 2
 count: i32 = 10
 user_prompt: string = "Summarize market trends"
 ai_result: string = ""
+native_mul_result: i32 = 20
+native_fib_result: string = ""
 </state>
 
 <main>
     <div class="container">
         <h1>⚡ Zvelte Multi-Language Hybrid Example</h1>
         <p class="status">{get_server_status()}</p>
+
+        <section class="card native-card">
+            <h2>⚡ Zig Native Acceleration (C-ABI ctypes)</h2>
+            <p>Compute <code>{count} × {multiplier}</code> in compiled machine code:</p>
+            <button class="btn btn-native" click={zvelte_multiply(count, multiplier).then(res => { native_mul_result = res; update(); })}>
+                Run Zig Multiply ➔ Result: {native_mul_result}
+            </button>
+
+            <div style="margin-top: 0.75rem;">
+                <button class="btn btn-native" click={benchmark_native_fib(count).then(res => { native_fib_result = res; update(); })}>
+                    Compute Native Fibonacci({count})
+                </button>
+            </div>
+            {#if native_fib_result}
+                <div class="native-box">{native_fib_result}</div>
+            {/if}
+        </section>
 
         <section class="card server-card">
             <h2>🐍 Python Server RPC & AI Engine</h2>

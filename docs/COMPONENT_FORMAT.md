@@ -76,10 +76,14 @@ def compute_factorial(n):
 ---
 
 ### Zig Native Script (`lang="zig" context="native"`)
-Compiled into a native C-ABI shared library for server-side compute acceleration.
+Compiled into a native C-ABI shared library (`libnative.so` / `libnative.dylib` / `native.dll`) for high-performance server-side compute acceleration.
 
 ```html
 <script lang="zig" context="native">
+pub export fn zvelte_multiply(a: i32, b: i32) callconv(.c) i32 {
+    return a * b;
+}
+
 pub export fn zvelte_fast_fib(n: u32) callconv(.c) u64 {
     if (n <= 1) return n;
     var a: u64 = 0;
@@ -93,6 +97,22 @@ pub export fn zvelte_fast_fib(n: u32) callconv(.c) u64 {
     return b;
 }
 </script>
+```
+
+#### How the Native Compilation & Python `ctypes` Linker Works:
+1. **Ahead-of-Time Native Compilation:** Zvelte extracts this code to `native.zig` and invokes `zig build-lib native.zig -dynamic -O ReleaseFast` to generate an optimized shared library (`libnative.so`).
+2. **Automated Python `ctypes` Wrapper:** Zvelte generates `worker.py` with automatic `ctypes.CDLL` loading, binding `argtypes` and `restype` for all exported C-ABI functions (`export fn ... callconv(.c)`).
+3. **Zero-Overhead Python Ingestion:** Exported Zig functions are injected into Python's global namespace, so Python server code can invoke native Zig functions at bare-metal machine code speed:
+```python
+def benchmark_native_fib(n):
+    # Calls compiled Zig shared library via ctypes with zero overhead!
+    val = zvelte_fast_fib(int(n))
+    return f"Zig Native Fibonacci({n}) = {val}"
+```
+4. **Client Asynchronous RPC Proxies:** Zvelte also generates client-side `async function <fn_name>(...args)` proxies in JavaScript, so browser UI code can invoke native Zig functions directly via JSON-RPC or through Python wrappers:
+```javascript
+const result = await zvelte_fast_fib(40); // 102334155
+```
 ```
 
 ---

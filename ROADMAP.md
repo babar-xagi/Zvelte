@@ -11,8 +11,8 @@
 | **`v0.0.1`** | **CLI, Two-File Scaffolding, TOML Loader, SFC Parser, Fine-Grained Reactive JS Codegen, Embedded Dev Server** | **✅ Released** |
 | **`v0.0.2`** | **Advanced Expression Parser, Conditional Rendering (`if`/`else`), Keyed List Rendering (`for`/`each`), Two-Way Form Input Bindings (`bind:value`)** | **✅ Released** |
 | **`v0.0.3`** | **Python Server Worker Process Integration & Line-Buffered JSON-RPC IPC Bridge (Client Async Proxies & Promise-Aware Reactive Updates)** | **✅ Released** |
-| `v0.0.4` | Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker | ⏳ Next |
-| `v0.0.5` | Zig Browser WebAssembly Compilation (`wasm32-freestanding`) & JS Host Adapter | 🗓️ Planned |
+| **`v0.0.4`** | **Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker** | **✅ Released** |
+| `v0.0.5` | Zig Browser WebAssembly Compilation (`wasm32-freestanding`) & JS Host Adapter | ⏳ Next |
 | `v0.1.0` | Production Optimization, Benchmark Suite, Stable Core Release | 🎯 Milestone |
 
 ---
@@ -73,10 +73,13 @@
 - [x] Advanced Expression Parser for state mutations, condition evaluations, and expressions.
 - [x] Extended `<state>` data type support for array/slice collections (`[]string`, `list`, `array`).
 
-#### Phase 9 — Zig Native Acceleration Modules
-- [ ] Auto-compile `<script lang="zig" context="native">` into host `.so` / `.dll`.
-- [ ] C ABI memory safety boundary tests.
-- [ ] Automatic Python `ctypes` wrapper generator.
+#### Phase 9 — Zig Native Acceleration Modules (v0.0.4)
+- [x] Auto-compile `<script lang="zig" context="native">` into host native shared library (`libnative.so` / `libnative.dylib` / `native.dll`) via `zig build-lib -dynamic -O ReleaseFast`.
+- [x] C-ABI function export parser and symbol extractor (`export fn ... callconv(.c)`).
+- [x] Automatic Python `ctypes` wrapper generator with typed `argtypes`, `restype`, and numeric argument coercion.
+- [x] Python worker integration injecting native Zig C-ABI bindings into Python server `globals()`.
+- [x] Client-side asynchronous RPC proxy generation exposing native Zig functions to browser JavaScript (`async function <fn_name>(...args)`).
+- [x] CLI `check`, `build`, and `clean` commands updated to handle native shared libraries and artifacts with recursive tree cleanup.
 
 #### Phase 10 — CPython Server Worker & Supervisor (v0.0.3)
 - [x] Auto-generate standard-library-only `worker.py` encapsulating user server functions with line-buffered JSON-RPC protocol.

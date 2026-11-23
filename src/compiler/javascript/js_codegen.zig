@@ -120,6 +120,25 @@ pub const JsCodegen = struct {
         return names.toOwnedSlice(allocator);
     }
 
+    pub fn extractZigFunctionNames(allocator: Allocator, code: []const u8) ![][]const u8 {
+        var names: std.ArrayList([]const u8) = .empty;
+        var lines_it = std.mem.splitScalar(u8, code, '\n');
+        while (lines_it.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            const fn_idx = std.mem.indexOf(u8, line, "fn ") orelse continue;
+            const before_fn = line[0..fn_idx];
+            if (std.mem.indexOf(u8, before_fn, "export") == null) continue;
+            const after_fn = line[fn_idx + 3 ..];
+            if (std.mem.indexOfScalar(u8, after_fn, '(')) |paren_idx| {
+                const fn_name = std.mem.trim(u8, after_fn[0..paren_idx], " \t");
+                if (fn_name.len > 0) {
+                    try names.append(allocator, fn_name);
+                }
+            }
+        }
+        return names.toOwnedSlice(allocator);
+    }
+
     pub fn generateHtml(self: *JsCodegen) ![]const u8 {
         var style_block: []const u8 = "";
         if (self.component.styles.len > 0) {
@@ -181,17 +200,19 @@ pub const JsCodegen = struct {
         );
 
         // Server function bindings / fallbacks
-        var has_python_server = false;
+        var has_server_rpc = false;
         for (self.component.scripts) |script| {
-            if (script.lang == .python and script.context == .server) {
-                has_python_server = true;
+            if ((script.lang == .python and script.context == .server) or
+                (script.lang == .zig and script.context == .native))
+            {
+                has_server_rpc = true;
                 break;
             }
         }
 
-        if (has_python_server) {
+        if (has_server_rpc) {
             try sb.writeAll(
-                \\  // Zvelte Python Server RPC Bridge
+                \\  // Zvelte Server & Native RPC Bridge
                 \\  async function __zvelte_rpc(method, params) {
                 \\    try {
                 \\      const response = await fetch("/api/rpc", {
@@ -217,6 +238,17 @@ pub const JsCodegen = struct {
             for (self.component.scripts) |script| {
                 if (script.lang == .python and script.context == .server) {
                     const fn_names = try extractPythonFunctionNames(self.allocator, script.code);
+                    for (fn_names) |fn_name| {
+                        try sb.print(
+                            \\  async function {s}(...args) {{
+                            \\    return await __zvelte_rpc("{s}", args);
+                            \\  }}
+                            \\  window.{s} = {s};
+                            \\
+                        , .{ fn_name, fn_name, fn_name, fn_name });
+                    }
+                } else if (script.lang == .zig and script.context == .native) {
+                    const fn_names = try extractZigFunctionNames(self.allocator, script.code);
                     for (fn_names) |fn_name| {
                         try sb.print(
                             \\  async function {s}(...args) {{

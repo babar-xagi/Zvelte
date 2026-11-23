@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.4] - 2026-11-23
+
+### ⚡ Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker (Phase 9)
+
+#### ✨ Core Features
+- **Native Zig C-ABI Compilation:** Automatically compiles `<script lang="zig" context="native">` blocks into machine-code shared libraries (`libnative.so` on Linux, `libnative.dylib` on macOS, `native.dll` on Windows) via `zig build-lib -dynamic -O ReleaseFast`.
+- **C-ABI Function Symbol Extractor:** Static parser extracting exported C-ABI functions (`export fn ... callconv(.c)`), their parameter types, and return types.
+- **Automated Python `ctypes` Wrapper Generator:** Generates type-safe ctypes bindings in `worker.py` mapping Zig types (`i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `void`) to C types (`c_int32`, `c_int64`, etc.), with automated argument coercion (`int(a)`, `float(a)`) and robust fallbacks.
+- **Seamless Python Server Interop:** Injects compiled native functions directly into Python server `globals()`. Python server functions can invoke bare-metal native Zig routines with near-zero latency.
+- **Client-Side Asynchronous RPC Access:** Generates client-side `async function <fn_name>(...args)` JavaScript proxies for native Zig exports, enabling direct browser-to-native execution via the JSON-RPC gateway.
+- **Production & Dev Build Pipelines:** Emits `dist/libnative.so` and `dist/native.zig` alongside `dist/worker.py`, `dist/app.js`, and `dist/index.html`.
+- **Recursive Clean Pipeline:** Upgraded `zvelte clean` to recursively delete `dist/` and `.zvelte/` directory trees using `dir.deleteTree`, safely preserving all user code while purging binary artifacts and caches.
+- **Enhanced Hybrid Example:** Updated `examples/03-hybrid-python-zig` showcasing native Zig multiplication (`zvelte_multiply`), ultra-fast Fibonacci computation (`zvelte_fast_fib`), and Python ctypes benchmarks.
+
+#### 🧪 Test Suite
+- **Native Parser & Ctypes Generator Tests:** Validates extraction of exported functions, parameter parsing, and ctypes Python code generation.
+- **End-to-End Native Compilation Test:** Compiles Zig native code into shared library and verifies binary creation.
+- **Direct Python `ctypes` Test:** Loads `libnative.so` into CPython, executes `zvelte_multiply` and `zvelte_fast_fib(40)` in sub-microseconds, verifying return values and type coercions.
+- **End-to-End Dev Server RPC Test:** Executes live dev server on port 3003, querying both direct native Zig RPC endpoints and Python ctypes wrapper endpoints over HTTP.
+
 ## [0.0.3] - 2026-11-22
 
 ### ⚡ Python Server Worker Process Integration & JSON-RPC Bridge (Phase 10)

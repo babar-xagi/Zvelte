@@ -7,20 +7,24 @@ const config = @import("../config/config.zig");
 const parser = @import("../source/parser.zig");
 const analyzer = @import("../semantic/analyzer.zig");
 const js_codegen = @import("javascript/js_codegen.zig");
+const native_compiler = @import("native/native_compiler.zig");
 
 pub const BuildResult = struct {
     output_dir: []const u8,
     html_bytes: usize,
     js_bytes: usize,
     worker_bytes: usize = 0,
+    native_bytes: usize = 0,
 };
 
-pub fn generatePythonWorker(allocator: Allocator, user_code: []const u8) ![]const u8 {
+pub fn generatePythonWorker(allocator: Allocator, user_code: []const u8, ctypes_code: []const u8) ![]const u8 {
     return std.fmt.allocPrint(allocator,
         \\#!/usr/bin/env python3
         \\import sys
         \\import json
         \\import traceback
+        \\
+        \\{s}
         \\
         \\# === Zvelte User Python Server Logic ===
         \\{s}
@@ -67,7 +71,7 @@ pub fn generatePythonWorker(allocator: Allocator, user_code: []const u8) ![]cons
         \\if __name__ == "__main__":
         \\    main()
         \\
-    , .{user_code});
+    , .{ ctypes_code, user_code });
 }
 
 pub fn buildProject(
@@ -114,11 +118,30 @@ pub fn buildProject(
     defer js_file.close(io);
     try js_file.writeStreamingAll(io, out.js);
 
+    // Check for native Zig script blocks & compile libnative.so
+    var native_bytes: usize = 0;
+    var ctypes_code: []const u8 = "";
+    var has_native = false;
+    for (comp.scripts) |script| {
+        if (script.lang == .zig and script.context == .native) {
+            has_native = true;
+            native_bytes = native_compiler.compileNativeLibrary(allocator, io, out_dir, script.code) catch 0;
+            const native_funcs = try native_compiler.parseExportedFunctions(allocator, script.code);
+            defer {
+                for (native_funcs) |f| f.deinit(allocator);
+                allocator.free(native_funcs);
+            }
+            ctypes_code = try native_compiler.generateCtypesBindings(allocator, native_funcs);
+            break;
+        }
+    }
+    defer if (has_native) allocator.free(ctypes_code);
+
     var worker_bytes: usize = 0;
     // Write worker.py if python server scripts exist
     for (comp.scripts) |script| {
         if (script.lang == .python and script.context == .server) {
-            const worker_code = try generatePythonWorker(allocator, script.code);
+            const worker_code = try generatePythonWorker(allocator, script.code, ctypes_code);
             defer allocator.free(worker_code);
 
             var worker_file = try out_dir.createFile(io, "worker.py", .{});
@@ -129,22 +152,36 @@ pub fn buildProject(
         }
     }
 
+    // If native code exists without python server script, still emit worker.py
+    if (worker_bytes == 0 and has_native) {
+        const worker_code = try generatePythonWorker(allocator, "", ctypes_code);
+        defer allocator.free(worker_code);
+
+        var worker_file = try out_dir.createFile(io, "worker.py", .{});
+        defer worker_file.close(io);
+        try worker_file.writeStreamingAll(io, worker_code);
+        worker_bytes = worker_code.len;
+    }
+
     return BuildResult{
         .output_dir = output_dir_name,
         .html_bytes = out.html.len,
         .js_bytes = out.js.len,
         .worker_bytes = worker_bytes,
+        .native_bytes = native_bytes,
     };
 }
 
 test "generate python worker script" {
     const allocator = std.testing.allocator;
     const user_code = "def greeting(): return 'Hello from test'";
-    const worker = try generatePythonWorker(allocator, user_code);
+    const ctypes_code = "# test ctypes";
+    const worker = try generatePythonWorker(allocator, user_code, ctypes_code);
     defer allocator.free(worker);
 
     try std.testing.expect(std.mem.indexOf(u8, worker, "def handle_rpc(payload):") != null);
     try std.testing.expect(std.mem.indexOf(u8, worker, "def greeting(): return 'Hello from test'") != null);
+    try std.testing.expect(std.mem.indexOf(u8, worker, "# test ctypes") != null);
     try std.testing.expect(std.mem.indexOf(u8, worker, "sys.stdin.readline()") != null);
 }
 
@@ -157,7 +194,7 @@ test "python worker rpc execution" {
         \\def greet(name):
         \\    return f"Welcome {name}!"
     ;
-    const worker_code = try generatePythonWorker(allocator, user_code);
+    const worker_code = try generatePythonWorker(allocator, user_code, "");
     defer allocator.free(worker_code);
 
     var child = try std.process.spawn(io, .{

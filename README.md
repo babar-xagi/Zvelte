@@ -4,7 +4,7 @@
 
 [![Zig 0.17.1](https://img.shields.io/badge/Zig-0.17.1-orange.svg)](https://ziglang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release: v0.0.3](https://img.shields.io/badge/Release-v0.0.3-green.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.3)
+[![Release: v0.0.4](https://img.shields.io/badge/Release-v0.0.4-green.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.4)
 
 ---
 
@@ -189,30 +189,38 @@ button {
 
 ```mermaid
 flowchart TD
-    subgraph Inputs["Source Files"]
+    subgraph Inputs["Source Files (Deterministic 2-File Layout)"]
         TOML["app.toml"]
         SFC["app.zvelte"]
     end
 
-    subgraph Compiler["Zvelte Compiler (Zig 0.17.1)"]
+    subgraph Compiler["Zvelte Compiler Engine (Zig 0.17.1)"]
         CFG["Config Parser"]
-        PARSER["Component Parser"]
-        SEM["Semantic Analyzer"]
-        CODEGEN["Fine-Grained DOM Codegen"]
+        PARSER["Multi-Lang SFC Parser"]
+        SEM["Semantic Symbol Analyzer"]
+        NATIVE["Native Zig C-ABI Compiler (zig build-lib)"]
+        PYGEN["Python ctypes & RPC Supervisor Gen"]
+        JSGEN["Fine-Grained DOM & Async Proxy Codegen"]
     end
 
-    subgraph Outputs["Targets"]
-        DEV["Dev Server (127.0.0.1:3000)"]
-        PROD["dist/ (index.html + app.js)"]
+    subgraph Runtime["Execution Backends"]
+        NATIVELIB["libnative.so / libnative.dylib (C-ABI)"]
+        PYWORKER["worker.py (CPython + ctypes Linker)"]
+        CLIENT["Browser Client (Fine-Grained DOM + RPC Bridge)"]
     end
 
     TOML --> CFG
     SFC --> PARSER
-    CFG --> SEM
     PARSER --> SEM
-    SEM --> CODEGEN
-    CODEGEN --> DEV
-    CODEGEN --> PROD
+    SEM --> NATIVE
+    SEM --> PYGEN
+    SEM --> JSGEN
+
+    NATIVE --> NATIVELIB
+    PYGEN --> PYWORKER
+    NATIVELIB -. ctypes .-> PYWORKER
+    JSGEN --> CLIENT
+    CLIENT == JSON-RPC (HTTP /api/rpc) ==> PYWORKER
 ```
 
 ---
