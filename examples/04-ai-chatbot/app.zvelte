@@ -10,23 +10,38 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
 def call_gemini(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-        candidates = data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if parts:
-                return parts[0].get("text", "No text returned by Gemini.")
-        return "Empty response from Gemini."
+    models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-pro"]
+    last_err = None
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "No text returned by Gemini.")
+                return "Empty response from Gemini."
+        except urllib.error.HTTPError as he:
+            last_err = he
+            if he.code == 404:
+                continue
+            raise he
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    return "No response from Gemini models."
 
 def call_openai(prompt):
     url = "https://api.openai.com/v1/chat/completions"
@@ -130,11 +145,11 @@ last_query: string = "Ready for your question"
         </section>
 
         <footer class="input-bar">
-            <input 
-                type="text" 
-                class="chat-input" 
-                placeholder="Ask Gemini or OpenAI anything..." 
-                bind:value={user_prompt} 
+            <input
+                type="text"
+                class="chat-input"
+                placeholder="Ask Gemini or OpenAI anything..."
+                bind:value={user_prompt}
             />
             <button class="btn-send" click={
                 is_loading = true;
