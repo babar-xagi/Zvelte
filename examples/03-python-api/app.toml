@@ -1,13 +1,17 @@
 [project]
-name = "complex-zig-benchmark"
-version = "1.0.0"
+name = "python-api-example"
+version = "0.1.0"
 entry = "app.zvelte"
 
 [app]
 target = "web"
-mode = "hybrid"
+mode = "python"
 renderer = "js"
 strict = true
+
+[python]
+version = "3.10+"
+executable = "python3"
 
 [dev]
 port = 3000

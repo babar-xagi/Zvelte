@@ -27,25 +27,14 @@ entry = "app.zvelte"
 
 [app]
 target = "web"
-mode = "hybrid"              # "python", "rust", or "hybrid"
-renderer = "js"               # "js", "wasm", or "auto"
+mode = "python"
+renderer = "js"
 strict = true
-
-[toolchain]
-rust = "1.80+"
-python = "3.10+"
 
 [python]
 enabled = true
 executable = "python3"
-execution = "server"          # CPython server-side; not browser Python
-rust_acceleration = true
-
-[rust]
-enabled = true
-executable = "rustc"
-native_modules = true
-wasm_modules = true
+version = "3.10+"
 
 [dev]
 host = "127.0.0.1"
@@ -64,31 +53,15 @@ source_maps = true
     )
 }
 
-pub const APP_ZVELTE_TEMPLATE: &str = r#"<script lang="rust">
-#[no_mangle]
-pub extern "C" fn rust_fast_fib(n: u32) -> u64 {
-    if n <= 1 { return n as u64; }
-    let mut a = 0u64;
-    let mut b = 1u64;
-    for _ in 2..=n {
-        let next = a + b;
-        a = b;
-        b = next;
-    }
-    b
-}
-</script>
-
-<script lang="python">
+pub const APP_ZVELTE_TEMPLATE: &str = r#"<script lang="python">
 name = "Babar"
 count = 0
 
 def greeting(user):
-    return f"Hello {user}! Greetings from Python server worker."
+    return f"Hello {user}! Greetings from Python server."
 
-def benchmark_rust_fib(n):
-    val = rust_fast_fib(int(n))
-    return f"Rust Native Fibonacci({n}) = {val} (sub-microsecond execution)"
+def calculate_square(n):
+    return int(n) ** 2
 </script>
 
 <main>
@@ -105,7 +78,7 @@ def benchmark_rust_fib(n):
     </div>
 
     <div class="card">
-        <p>{benchmark_rust_fib(40)}</p>
+        <p>Square of {count} is: <strong>{calculate_square(count)}</strong></p>
     </div>
 </main>
 
@@ -118,26 +91,36 @@ main {
     padding: 2.5rem;
     background: #ffffff;
     border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+h1 {
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+p {
+    color: #64748b;
+    margin-bottom: 1.5rem;
 }
 .card {
-    margin-top: 1.5rem;
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
 }
 button {
-    padding: 0.6rem 1.4rem;
-    border-radius: 8px;
-    border: 1px solid #0070f3;
-    background: #0070f3;
+    background: #0284c7;
     color: white;
-    font-size: 1rem;
-    font-weight: 500;
+    border: none;
+    padding: 0.625rem 1.25rem;
+    border-radius: 6px;
+    font-weight: 600;
     cursor: pointer;
+    margin: 0 0.25rem;
+    transition: background 0.15s;
 }
 button:hover {
-    background: #005bb5;
+    background: #0369a1;
 }
 </style>
 "#;

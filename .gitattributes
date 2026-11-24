@@ -1,0 +1,5 @@
+# GitHub Linguist Language Configuration
+*.rs linguist-detectable=true
+*.py linguist-detectable=true
+docs/** linguist-documentation=true
+examples/** linguist-documentation=true

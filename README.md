@@ -1,9 +1,10 @@
 # Zvelte
 
-> **A high-performance, multi-language reactive web framework powered by Rust, supporting Python server blocks, native Rust C-ABI routines, and fine-grained DOM reactivity.**
+> **A Python Reactive Web Framework Powered by Rust.**  
+> Author full-stack, fine-grained reactive web applications using Python server logic and Svelte-like frontend syntax in a single `.zvelte` component, backed by an ultra-fast, zero-dependency Rust engine.
 
-[![Rust 1.80+](https://img.shields.io/badge/Rust-1.80+-orange.svg)](https://www.rust-lang.org/)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Rust 1.80+](https://img.shields.io/badge/Engine-Rust-orange.svg)](https://www.rust-lang.org/)
+[![Python 3.10+](https://img.shields.io/badge/Language-Python%203.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Release: v0.0.5](https://img.shields.io/badge/Release-v0.0.5-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.5)
 
@@ -11,11 +12,11 @@
 
 ## 🌟 Highlights
 
-- ⚡ **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no node_modules.
-- 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Reactive state bindings directly update affected DOM text cells and attributes, identical to Svelte.
-- 🐍 **Python Server Integration:** Seamless CPython worker executing line-buffered JSON-RPC over stdin/stdout. Safely access databases, file systems, and AI models on the server.
-- 🦀 **Native Rust Acceleration:** Write `<script lang="rust">` blocks that compile directly via `rustc --crate-type cdylib -O` to native machine code (`libnative.so` / `native.dll`), linked to Python via `ctypes`.
-- 🚀 **Zero-Dependency Rust Engine:** The entire compiler, parser, codegen, and dev server are written in pure Rust using only the standard library (`std`), delivering sub-500 KB binaries and sub-3ms check times.
+- 🐍 **Developed for Python:** Write Python backend functions, AI pipelines, database queries, and data processing directly inside your component (`<script lang="python">`).
+- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond execution, sub-500 KB binary footprint, and rock-solid memory safety.
+- 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Reactive state bindings directly update affected DOM text cells and attributes, just like Svelte.
+- 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no node_modules.
+- 🛡️ **Secure by Design:** Server-side API keys, database credentials, and secret logic stay strictly inside the Python server process and are never bundled into client-side JavaScript.
 
 ---
 
@@ -75,7 +76,7 @@ Browse working example applications in the [`examples/`](examples/) directory:
 
 - ⚡ **[01-counter](examples/01-counter/):** Pure reactive client counter with increment, decrement, and reset.
 - 📝 **[02-todo-app](examples/02-todo-app/):** Task manager illustrating multiple state variables, two-way bindings, and loops.
-- 🦀 **[03-hybrid-python-rust](examples/03-hybrid-python-rust/):** Multi-language hybrid app with Python server logic and native Rust C-ABI functions.
+- 🐍 **[03-python-api](examples/03-python-api/):** Python server integration for calculations, platform info, and data formatting.
 - 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini & OpenAI GPT-4o with server-side API keys and zero pip dependencies.
 
 ---
@@ -112,41 +113,25 @@ zvelte dev
 
 # 3. Compile for production
 zvelte build
-# Emits optimized dist/index.html, dist/app.js, dist/worker.py, and dist/libnative.so
+# Emits optimized dist/index.html, dist/app.js, and dist/worker.py
 ```
 
 ---
 
 ## 📐 Component Anatomy (`app.zvelte`)
 
-Declare variables and functions inside `<script>`, and bind them directly in your markup with Svelte-style ergonomics:
+Declare Python server functions and client reactive state inside `<script>`, and bind them directly in your markup with Svelte-style ergonomics:
 
 ```html
-<script lang="rust">
-#[no_mangle]
-pub extern "C" fn rust_fast_fib(n: u32) -> u64 {
-    if n <= 1 { return n as u64; }
-    let mut a = 0u64;
-    let mut b = 1u64;
-    for _ in 2..=n {
-        let next = a + b;
-        a = b;
-        b = next;
-    }
-    b
-}
-</script>
-
 <script lang="python">
 name = "Babar"
 count = 0
 
 def greeting(user):
-    return f"Hello {user}! Greetings from Python."
+    return f"Hello {user}! Greetings from Python server."
 
-def benchmark_rust_fib(n):
-    val = rust_fast_fib(int(n))
-    return f"Rust Native Fibonacci({n}) = {val:,}"
+def calculate_square(n):
+    return int(n) ** 2
 </script>
 
 <main>
@@ -163,7 +148,7 @@ def benchmark_rust_fib(n):
     </div>
 
     <div class="card">
-        <p>{benchmark_rust_fib(40)}</p>
+        <p>Square of {count} is: <strong>{calculate_square(count)}</strong></p>
     </div>
 </main>
 
@@ -171,16 +156,40 @@ def benchmark_rust_fib(n):
 main {
     font-family: system-ui, sans-serif;
     max-width: 36rem;
-    margin: 3rem auto;
+    margin: 4rem auto;
     text-align: center;
+    padding: 2.5rem;
+    background: #ffffff;
+    border-radius: 12px;
+}
+h1 {
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+p {
+    color: #64748b;
+    margin-bottom: 1.5rem;
+}
+.card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
 }
 button {
-    margin: 0.5rem;
-    padding: 0.6rem 1.2rem;
-    border-radius: 6px;
-    background: #0070f3;
+    background: #0284c7;
     color: white;
+    border: none;
+    padding: 0.625rem 1.25rem;
+    border-radius: 6px;
+    font-weight: 600;
     cursor: pointer;
+    margin: 0 0.25rem;
+    transition: background 0.15s;
+}
+button:hover {
+    background: #0369a1;
 }
 </style>
 ```
@@ -200,27 +209,22 @@ flowchart TD
         CFG["Config Parser (toml_parser.rs)"]
         PARSER["Multi-Lang SFC Parser (parser.rs)"]
         SEM["Semantic Symbol Analyzer (analyzer.rs)"]
-        NATIVE["Native Rust C-ABI Compiler (rustc cdylib)"]
-        PYGEN["Python ctypes & RPC Supervisor Gen (native_compiler.rs)"]
+        PYGEN["Python RPC Supervisor Gen (codegen.rs)"]
         JSGEN["Fine-Grained DOM & Async Proxy Codegen (js_codegen.rs)"]
     end
 
     subgraph Runtime["Execution Backends"]
-        NATIVELIB["libnative.so / native.dll (Rust C-ABI)"]
-        PYWORKER["worker.py (CPython + ctypes Linker)"]
+        PYWORKER["worker.py (CPython Supervisor)"]
         CLIENT["Browser Client (Fine-Grained DOM + RPC Bridge)"]
     end
 
     TOML --> CFG
     SFC --> PARSER
     PARSER --> SEM
-    SEM --> NATIVE
     SEM --> PYGEN
     SEM --> JSGEN
 
-    NATIVE --> NATIVELIB
     PYGEN --> PYWORKER
-    NATIVELIB -. ctypes .-> PYWORKER
     JSGEN --> CLIENT
     CLIENT == JSON-RPC (HTTP /api/rpc) ==> PYWORKER
 ```

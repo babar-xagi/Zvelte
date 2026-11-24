@@ -1,0 +1,124 @@
+<script lang="python">
+from datetime import datetime
+import math
+import platform
+
+server_status = "Ready"
+count = 5
+user_name = "Python Developer"
+calculation_result = ""
+
+def get_server_info():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    py_ver = platform.python_version()
+    os_name = platform.system()
+    return f"CPython {py_ver} on {os_name} | Server Timestamp: {now}"
+
+def compute_factorial(n):
+    num = int(n)
+    if num < 0:
+        return "Factorial undefined for negative numbers"
+    return f"{num}! = {math.factorial(num):,}"
+
+def generate_powers(base, exp):
+    b = float(base)
+    e = int(exp)
+    return f"{b}^{e} = {b ** e:,.2f}"
+</script>
+
+<style>
+.container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 30px;
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+.header {
+    border-bottom: 1px solid #334155;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+}
+.header h1 {
+    margin: 0;
+    color: #38bdf8;
+    font-size: 24px;
+}
+.badge {
+    display: inline-block;
+    background: #3776ab;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 8px;
+}
+.card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+}
+button {
+    background: #0284c7;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+button:hover {
+    background: #0369a1;
+}
+.result-box {
+    background: #0b1120;
+    border: 1px solid #334155;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: monospace;
+    color: #4ade80;
+    margin-top: 12px;
+}
+</style>
+
+<div class="container">
+    <div class="header">
+        <h1>🐍 Zvelte Python Server Integration</h1>
+        <span class="badge">Pure Python Server + Svelte Reactivity</span>
+    </div>
+
+    <div class="card">
+        <h2>Client-Side Reactive Counter</h2>
+        <p>Active state: count = <strong>{count}</strong></p>
+        <div class="button-row">
+            <button click={count++}>Increment (+1)</button>
+            <button click={count--}>Decrement (-1)</button>
+            <button click={count = 0}>Reset</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Python Server Functions</h2>
+        <p>Welcome, <strong>{user_name}</strong>!</p>
+        <div class="button-row">
+            <button click={calculation_result = get_server_info()}>Get Server Info</button>
+            <button click={calculation_result = compute_factorial(count)}>Compute Factorial ({count}!)</button>
+            <button click={calculation_result = generate_powers(count, 3)}>Cube ({count}^3)</button>
+        </div>
+        <div class="result-box">
+            {calculation_result}
+        </div>
+    </div>
+</div>
