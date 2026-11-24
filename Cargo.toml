@@ -1,0 +1,26 @@
+[package]
+name = "zvelte"
+version = "0.0.5"
+edition = "2024"
+authors = ["Babar <babar@example.com>"]
+description = "A fast, multi-language reactive web framework supporting Python server blocks and Rust native C-ABI modules with fine-grained DOM reactivity."
+license = "MIT"
+
+[[bin]]
+name = "zvelte"
+path = "src/main.rs"
+
+[[bin]]
+name = "zvelte-rs"
+path = "src/bin/zvelte-rs.rs"
+
+[lib]
+name = "zvelte"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

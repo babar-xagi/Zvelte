@@ -6,7 +6,7 @@ use crate::semantic::analyzer::analyze;
 use crate::compiler::codegen::build_project;
 use crate::devserver::server::DevServer;
 
-pub const VERSION: &str = "0.0.4";
+pub const VERSION: &str = "0.0.5";
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {
@@ -18,7 +18,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
     match command {
         "--version" | "-v" | "version" => {
-            println!("rustby (zvelte-rs) version {}", VERSION);
+            println!("zvelte version {}", VERSION);
             Ok(())
         }
         "--help" | "-h" | "help" => {
@@ -27,18 +27,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         "new" => {
             if args.len() < 3 {
-                return Err("'zvelte-rs new' requires a project name.\nUsage: zvelte-rs new <project-name>".to_string());
+                return Err("'zvelte new' requires a project name.\nUsage: zvelte new <project-name>".to_string());
             }
             let proj_name = &args[2];
             let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
             scaffold::create_project(proj_name, &cwd)?;
 
-            println!("\n\x1b[32m✔\x1b[0m Created Rustby (Zvelte-RS) project \x1b[1m{}\x1b[0m", proj_name);
+            println!("\n\x1b[32m✔\x1b[0m Created Zvelte project \x1b[1m{}\x1b[0m", proj_name);
             println!("  ├── app.toml");
             println!("  └── app.zvelte\n");
             println!("Next steps:");
             println!("  cd {}", proj_name);
-            println!("  zvelte-rs dev\n");
+            println!("  zvelte dev\n");
             Ok(())
         }
         "check" => {
@@ -132,18 +132,19 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         unknown => {
-            Err(format!("unknown command '{}'. Run 'zvelte-rs --help' for available commands.", unknown))
+            Err(format!("unknown command '{}'. Run 'zvelte --help' for available commands.", unknown))
         }
     }
 }
 
 pub fn print_help() {
     println!(
-        r#"Rustby (Zvelte-RS) Compiler v{}
-A Rust-powered, multi-language reactive web framework supporting Python server blocks
+        r#"Zvelte Compiler v{} (Rust Core)
+A high-performance, multi-language reactive web framework supporting Python server blocks
 and Rust native C-ABI modules with fine-grained DOM reactivity.
 
 USAGE:
+  zvelte <command> [options]
   zvelte-rs <command> [options]
 
 COMMANDS:

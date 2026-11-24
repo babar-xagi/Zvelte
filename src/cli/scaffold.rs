@@ -55,7 +55,7 @@ open_browser = false
 
 [build]
 output = "dist"
-cache = ".rustby"
+cache = ".zvelte"
 optimization = "release"
 minify = false
 source_maps = true

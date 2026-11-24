@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "rustby"
-version = "0.0.4"
+name = "zvelte"
+version = "0.0.5"

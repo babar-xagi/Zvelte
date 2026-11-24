@@ -71,6 +71,34 @@ fn is_builtin(name: &str) -> bool {
             | "event"
             | "Math"
             | "JSON"
+            | "const"
+            | "let"
+            | "var"
+            | "function"
+            | "return"
+            | "new"
+            | "typeof"
+            | "instanceof"
+            | "void"
+            | "delete"
+            | "async"
+            | "await"
+            | "if"
+            | "else"
+            | "for"
+            | "while"
+            | "do"
+            | "switch"
+            | "case"
+            | "break"
+            | "continue"
+            | "default"
+            | "try"
+            | "catch"
+            | "finally"
+            | "throw"
+            | "in"
+            | "of"
     )
 }
 
@@ -243,9 +271,26 @@ fn validate_expr_identifiers(
 ) -> Result<(), SemanticError> {
     let chars: Vec<char> = expr.chars().collect();
     let mut i = 0;
+    let mut local_vars: HashSet<String> = HashSet::new();
+    let mut prev_ident: Option<String> = None;
 
     while i < chars.len() {
         let c = chars[i];
+        if c == '"' || c == '\'' {
+            let quote = c;
+            i += 1;
+            while i < chars.len() && chars[i] != quote {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < chars.len() {
+                i += 1;
+            }
+            continue;
+        }
+
         if c.is_alphabetic() || c == '_' {
             let start = i;
             while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
@@ -254,18 +299,40 @@ fn validate_expr_identifiers(
             let ident: String = chars[start..i].iter().collect();
             let is_prop_access = start > 0 && chars[start - 1] == '.';
 
+            // Track declarations: const x, let x, var x
+            if let Some(ref p) = prev_ident {
+                if p == "const" || p == "let" || p == "var" {
+                    local_vars.insert(ident.clone());
+                }
+            }
+
+            // Track arrow function parameter: ident =>
+            let mut peek_idx = i;
+            while peek_idx < chars.len() && chars[peek_idx].is_whitespace() {
+                peek_idx += 1;
+            }
+            if peek_idx + 1 < chars.len() && chars[peek_idx] == '=' && chars[peek_idx + 1] == '>' {
+                local_vars.insert(ident.clone());
+            }
+
             if !is_prop_access
                 && !is_builtin(&ident)
+                && !local_vars.contains(&ident)
                 && !states.contains_key(&ident)
                 && !funcs.contains(&ident)
                 && !scope_vars.contains(&ident)
             {
-                // Numeric or method check
                 if !ident.chars().all(|ch| ch.is_ascii_digit()) {
                     return Err(SemanticError::UnknownStateInEvent(ident));
                 }
             }
+            prev_ident = Some(ident);
         } else {
+            if !c.is_whitespace() {
+                if c == ';' || c == '{' || c == '}' || c == '(' || c == ')' || c == ',' {
+                    prev_ident = None;
+                }
+            }
             i += 1;
         }
     }
