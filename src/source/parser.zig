@@ -121,6 +121,11 @@ pub const Parser = struct {
             }
         }
 
+        // Extract top-level script variables into reactive state (Svelte-style!)
+        for (scripts.items) |script_block| {
+            try self.extractScriptStateVariables(&states, script_block);
+        }
+
         return ast.Component{
             .arena = undefined,
             .scripts = try scripts.toOwnedSlice(self.allocator),
@@ -128,6 +133,141 @@ pub const Parser = struct {
             .root_nodes = try root_nodes.toOwnedSlice(self.allocator),
             .styles = styles,
         };
+    }
+
+    fn extractScriptStateVariables(self: *Parser, states: *std.ArrayList(ast.StateVar), script_block: ast.ScriptBlock) ParseError!void {
+        var lines_it = std.mem.splitScalar(u8, script_block.code, '\n');
+        while (lines_it.next()) |raw_line| {
+            // Only top-level statements (no leading spaces or tabs)
+            if (raw_line.len == 0) continue;
+            if (raw_line[0] == ' ' or raw_line[0] == '\t') continue;
+
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            if (line.len == 0) continue;
+
+            // Skip comments and control flow / imports / functions
+            if (std.mem.startsWith(u8, line, "#") or
+                std.mem.startsWith(u8, line, "//") or
+                std.mem.startsWith(u8, line, "/*") or
+                std.mem.startsWith(u8, line, "import ") or
+                std.mem.startsWith(u8, line, "from ") or
+                std.mem.startsWith(u8, line, "def ") or
+                std.mem.startsWith(u8, line, "async def ") or
+                std.mem.startsWith(u8, line, "class ") or
+                std.mem.startsWith(u8, line, "pub ") or
+                std.mem.startsWith(u8, line, "fn ") or
+                std.mem.startsWith(u8, line, "return "))
+            {
+                continue;
+            }
+
+            var clean_line = line;
+            if (script_block.lang == .js) {
+                if (std.mem.startsWith(u8, clean_line, "let ")) {
+                    clean_line = std.mem.trim(u8, clean_line[4..], " \t");
+                } else if (std.mem.startsWith(u8, clean_line, "var ")) {
+                    clean_line = std.mem.trim(u8, clean_line[4..], " \t");
+                } else if (std.mem.startsWith(u8, clean_line, "const ")) {
+                    clean_line = std.mem.trim(u8, clean_line[6..], " \t");
+                }
+            } else if (script_block.lang == .zig) {
+                if (std.mem.startsWith(u8, clean_line, "var ")) {
+                    clean_line = std.mem.trim(u8, clean_line[4..], " \t");
+                } else if (std.mem.startsWith(u8, clean_line, "const ")) {
+                    clean_line = std.mem.trim(u8, clean_line[6..], " \t");
+                }
+            }
+
+            // Find '='
+            const eq_idx = std.mem.indexOfScalar(u8, clean_line, '=') orelse continue;
+
+            // Ensure not '==' or '+=' or '-=' or '*=' or '<=' or '>=' or '!='
+            if (eq_idx > 0) {
+                const prev = clean_line[eq_idx - 1];
+                if (prev == '=' or prev == '+' or prev == '-' or prev == '*' or prev == '/' or prev == '<' or prev == '>' or prev == '!') continue;
+            }
+            if (eq_idx + 1 < clean_line.len and clean_line[eq_idx + 1] == '=') continue;
+
+            var raw_lhs = std.mem.trim(u8, clean_line[0..eq_idx], " \t");
+            const raw_rhs = std.mem.trim(u8, clean_line[eq_idx + 1 ..], " \t\r;");
+
+            // For Zig typed variables: var name: []const u8 = ...
+            if (std.mem.indexOfScalar(u8, raw_lhs, ':')) |colon_idx| {
+                raw_lhs = std.mem.trim(u8, raw_lhs[0..colon_idx], " \t");
+            }
+
+            // Validate that lhs is a valid identifier
+            if (raw_lhs.len == 0) continue;
+            var is_valid_ident = true;
+            for (raw_lhs, 0..) |c, idx| {
+                if (idx == 0) {
+                    if (!((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_')) {
+                        is_valid_ident = false;
+                        break;
+                    }
+                } else {
+                    if (!((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_')) {
+                        is_valid_ident = false;
+                        break;
+                    }
+                }
+            }
+            if (!is_valid_ident) continue;
+
+            // Convert Python / Zig literal values to JS
+            var initial_val = raw_rhs;
+            var type_name: []const u8 = "any";
+
+            if (std.mem.eql(u8, raw_rhs, "True")) {
+                initial_val = "true";
+                type_name = "bool";
+            } else if (std.mem.eql(u8, raw_rhs, "False")) {
+                initial_val = "false";
+                type_name = "bool";
+            } else if (std.mem.eql(u8, raw_rhs, "None") or std.mem.eql(u8, raw_rhs, "null")) {
+                initial_val = "null";
+                type_name = "any";
+            } else if (raw_rhs.len >= 2 and raw_rhs[0] == '\'' and raw_rhs[raw_rhs.len - 1] == '\'') {
+                const inner = raw_rhs[1 .. raw_rhs.len - 1];
+                initial_val = std.fmt.allocPrint(self.allocator, "\"{s}\"", .{inner}) catch return ParseError.OutOfMemory;
+                type_name = "string";
+            } else if (raw_rhs.len >= 2 and raw_rhs[0] == '"' and raw_rhs[raw_rhs.len - 1] == '"') {
+                type_name = "string";
+            } else if (std.mem.startsWith(u8, raw_rhs, "[") and std.mem.endsWith(u8, raw_rhs, "]")) {
+                type_name = "list";
+            } else if (std.mem.startsWith(u8, raw_rhs, "{") and std.mem.endsWith(u8, raw_rhs, "}")) {
+                type_name = "dict";
+            } else {
+                var is_num = true;
+                for (raw_rhs) |c| {
+                    if (!((c >= '0' and c <= '9') or c == '.' or c == '-')) {
+                        is_num = false;
+                        break;
+                    }
+                }
+                if (is_num and raw_rhs.len > 0) {
+                    type_name = if (std.mem.indexOfScalar(u8, raw_rhs, '.') != null) "f32" else "i32";
+                }
+            }
+
+            // Check if already in states
+            var already_exists = false;
+            for (states.items) |st| {
+                if (std.mem.eql(u8, st.name, raw_lhs)) {
+                    already_exists = true;
+                    break;
+                }
+            }
+
+            if (!already_exists) {
+                states.append(self.allocator, .{
+                    .name = raw_lhs,
+                    .type_name = type_name,
+                    .initial_value = initial_val,
+                    .line = script_block.line,
+                }) catch return ParseError.OutOfMemory;
+            }
+        }
     }
 
     fn parseScriptBlock(self: *Parser) ParseError!ast.ScriptBlock {
@@ -174,8 +314,25 @@ pub const Parser = struct {
 
         if (self.peek() == '>') _ = self.advance();
 
-        if (lang == null or context == null) {
-            return ParseError.MissingScriptAttribute;
+        // Sensible defaults when lang or context is omitted (Svelte-style ergonomics)
+        if (lang == null) {
+            if (context) |ctx| {
+                switch (ctx) {
+                    .server => lang = .python,
+                    .native, .wasm => lang = .zig,
+                    .client => lang = .js,
+                }
+            } else {
+                lang = .js;
+            }
+        }
+
+        if (context == null) {
+            switch (lang.?) {
+                .python => context = .server,
+                .zig => context = .native,
+                .js => context = .client,
+            }
         }
 
         const body_start = self.pos;
@@ -614,10 +771,12 @@ test "parse full hybrid app.zvelte" {
     try std.testing.expectEqual(ast.ScriptLang.zig, comp.scripts[2].lang);
     try std.testing.expectEqual(ast.ScriptContext.wasm, comp.scripts[2].context);
 
-    try std.testing.expectEqual(@as(usize, 1), comp.states.len);
+    try std.testing.expectEqual(@as(usize, 2), comp.states.len);
     try std.testing.expectEqualStrings("count", comp.states[0].name);
     try std.testing.expectEqualStrings("i32", comp.states[0].type_name);
     try std.testing.expectEqualStrings("0", comp.states[0].initial_value);
+    try std.testing.expectEqualStrings("name", comp.states[1].name);
+    try std.testing.expectEqualStrings("\"Babbar\"", comp.states[1].initial_value);
 
     try std.testing.expectEqual(@as(usize, 1), comp.root_nodes.len);
     try std.testing.expectEqualStrings("main", comp.root_nodes[0].tag);
@@ -702,4 +861,67 @@ test "parse two-way form input bindings" {
     try std.testing.expectEqual(@as(usize, 1), input2.bindings.len);
     try std.testing.expectEqualStrings("checked", input2.bindings[0].property);
     try std.testing.expectEqualStrings("is_completed", input2.bindings[0].variable);
+}
+
+test "parse svelte-style script blocks with omitted attributes" {
+    const allocator = std.testing.allocator;
+
+    // 1. Plain <script> (defaults to js / client)
+    const src1 =
+        \\<script>
+        \\let title = "My Svelte App";
+        \\var count = 5;
+        \\</script>
+        \\<h1>{title}</h1>
+    ;
+    var comp1 = try parseComponent(allocator, src1);
+    defer comp1.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), comp1.scripts.len);
+    try std.testing.expectEqual(ast.ScriptLang.js, comp1.scripts[0].lang);
+    try std.testing.expectEqual(ast.ScriptContext.client, comp1.scripts[0].context);
+    try std.testing.expectEqual(@as(usize, 2), comp1.states.len);
+    try std.testing.expectEqualStrings("title", comp1.states[0].name);
+    try std.testing.expectEqualStrings("\"My Svelte App\"", comp1.states[0].initial_value);
+    try std.testing.expectEqualStrings("count", comp1.states[1].name);
+    try std.testing.expectEqualStrings("5", comp1.states[1].initial_value);
+
+    // 2. <script lang="python"> (defaults context="server" and extracts state)
+    const src2 =
+        \\<script lang="python">
+        \\name = "Babar"
+        \\score = 98.5
+        \\is_admin = True
+        \\</script>
+        \\<h1>{name}</h1>
+    ;
+    var comp2 = try parseComponent(allocator, src2);
+    defer comp2.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), comp2.scripts.len);
+    try std.testing.expectEqual(ast.ScriptLang.python, comp2.scripts[0].lang);
+    try std.testing.expectEqual(ast.ScriptContext.server, comp2.scripts[0].context);
+    try std.testing.expectEqual(@as(usize, 3), comp2.states.len);
+    try std.testing.expectEqualStrings("name", comp2.states[0].name);
+    try std.testing.expectEqualStrings("\"Babar\"", comp2.states[0].initial_value);
+    try std.testing.expectEqualStrings("score", comp2.states[1].name);
+    try std.testing.expectEqualStrings("98.5", comp2.states[1].initial_value);
+    try std.testing.expectEqualStrings("is_admin", comp2.states[2].name);
+    try std.testing.expectEqualStrings("true", comp2.states[2].initial_value);
+
+    // 3. <script lang="zig"> (defaults context="native")
+    const src3 =
+        \\<script lang="zig">
+        \\pub export fn add(a: i32, b: i32) callconv(.c) i32 {
+        \\    return a + b;
+        \\}
+        \\</script>
+        \\<p>Ready</p>
+    ;
+    var comp3 = try parseComponent(allocator, src3);
+    defer comp3.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), comp3.scripts.len);
+    try std.testing.expectEqual(ast.ScriptLang.zig, comp3.scripts[0].lang);
+    try std.testing.expectEqual(ast.ScriptContext.native, comp3.scripts[0].context);
 }

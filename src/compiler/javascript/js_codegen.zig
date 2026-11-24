@@ -262,6 +262,15 @@ pub const JsCodegen = struct {
             }
         }
 
+        // Inject user client-side JavaScript scripts
+        for (self.component.scripts) |script| {
+            if (script.lang == .js and script.context == .client) {
+                try sb.writeAll("\n  // User Client Script\n  ");
+                try sb.writeAll(script.code);
+                try sb.writeAll("\n");
+            }
+        }
+
         try sb.writeAll(
             \\  document.addEventListener("DOMContentLoaded", function() {
             \\    const root = document.getElementById("app");

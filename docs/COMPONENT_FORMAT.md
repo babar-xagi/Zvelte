@@ -6,35 +6,57 @@
 
 ## 📐 Anatomical Structure
 
-Every `.zvelte` component is organized into clean, dedicated sections:
+Like Svelte, every `.zvelte` component is a single-file component with a script, markup, and scoped styles. You can write pure Python, pure Zig, pure JavaScript, or hybrid:
 
 ```html
-<!-- 1. Multi-Language Script Blocks -->
-<script lang="python" context="server"> ... </script>
-<script lang="zig" context="native"> ... </script>
-<script lang="zig" context="wasm"> ... </script>
+<!-- 1. Script Block (Python, Zig, or JavaScript) -->
+<script lang="python">
+name = "Babar"
+count = 0
 
-<!-- 2. Reactive State Declaration Block -->
-<state>
-...
-</state>
+def greeting(user):
+    return f"Hello {user} from Python server!"
+</script>
 
-<!-- 3. Component Markup & UI Tree -->
+<!-- 2. Component Markup & UI Tree -->
 <main>
-...
+    <h1>Hello {name}</h1>
+    <p>{greeting(name)}</p>
+    <button click={count++}>Count: {count}</button>
 </main>
 
-<!-- 4. Scoped Styles -->
+<!-- 3. Scoped Styles -->
 <style>
-...
+main {
+    font-family: system-ui, sans-serif;
+    text-align: center;
+}
 </style>
 ```
+
+> [!TIP]
+> **Svelte-Style Automatic State:** Top-level variables in `<script>` (e.g. `name = "Babar"`, `count = 0`, or `let count = 0`) automatically become reactive component state! You do not need a separate `<state>` block unless you want explicit type annotations.
 
 ---
 
 ## 🐍 1. Script Blocks & Execution Contexts
 
-All `<script>` tags must explicitly declare both `lang` and `context`. Zvelte does not guess or assume script semantics.
+Zvelte provides intuitive defaults with zero boilerplate. Attributes are completely optional:
+
+| Script Tag | Language | Execution Context | Description |
+|---|---|---|---|
+| `<script>` | JavaScript | Client | Standard client-side JS reactive logic and UI event handlers. |
+| `<script lang="python">` | Python | Server | CPython server worker process. Runs AI, database, or backend logic. |
+| `<script lang="zig">` | Zig | Native | Bare-metal C-ABI shared library (`libnative.so`) for ultra-fast compute. |
+| `<script lang="zig" context="wasm">` | Zig | Browser WASM | Compiled to `wasm32-freestanding` and loaded into the browser runtime. |
+
+### Complete Language Independence
+
+The languages are **completely decoupled**:
+- **Pure Python App:** Write `<script lang="python">`. Zero Zig required. No native compiler or shared libraries are built.
+- **Pure Zig App:** Write `<script lang="zig">`. Zero Python required. No Python worker or CPython supervisor is launched.
+- **Pure Svelte/JS App:** Write `<script>`. Zero Python and zero Zig required.
+- **Hybrid App:** Mix Python server logic, native Zig modules, and client state when your application benefits from both.
 
 ### Python Server Script (`lang="python" context="server"`)
 Executes inside a managed CPython host worker supervisor. Ideal for database interactions, AI model pipelines (e.g. PyTorch, HuggingFace, llama-cpp-python), data science, and backend calculations.

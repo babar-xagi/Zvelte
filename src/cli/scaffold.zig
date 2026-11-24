@@ -69,49 +69,57 @@ pub fn getAppTomlTemplate(allocator: std.mem.Allocator, project_name: []const u8
 }
 
 pub const APP_ZVELTE_TEMPLATE =
-    \\<script lang="python" context="server">
-    \\from datetime import datetime
+    \\<script lang="python">
+    \\name = "Babar"
+    \\count = 0
     \\
-    \\name = "Babbar"
-    \\
-    \\def greeting():
-    \\    return f"Hello {name}"
+    \\def greeting(user):
+    \\    return f"Hello {user}! Greetings from Python server worker."
     \\</script>
-    \\
-    \\<script lang="zig" context="native">
-    \\pub export fn zvelte_double(value: i32) callconv(.c) i32 {
-    \\    return value * 2;
-    \\}
-    \\</script>
-    \\
-    \\<script lang="zig" context="wasm">
-    \\pub export fn zvelte_square(value: i32) callconv(.c) i32 {
-    \\    return value * value;
-    \\}
-    \\</script>
-    \\
-    \\<state>
-    \\count: i32 = 0
-    \\</state>
     \\
     \\<main>
-    \\    <h1>{greeting()}</h1>
-    \\    <h2>Count: {count}</h2>
+    \\    <h1>Hello {name}</h1>
+    \\    <p>{greeting(name)}</p>
     \\
-    \\    <button click={count++}>
-    \\        Increment
-    \\    </button>
-    \\
-    \\    <button click={count = 0}>
-    \\        Reset
-    \\    </button>
+    \\    <div class="card">
+    \\        <button click={count++}>
+    \\            Clicked {count} times
+    \\        </button>
+    \\        <button click={count = 0}>
+    \\            Reset
+    \\        </button>
+    \\    </div>
     \\</main>
     \\
     \\<style>
     \\main {
-    \\    font-family: system-ui, sans-serif;
-    \\    max-width: 42rem;
-    \\    margin: 3rem auto;
+    \\    font-family: system-ui, -apple-system, sans-serif;
+    \\    max-width: 36rem;
+    \\    margin: 4rem auto;
+    \\    text-align: center;
+    \\    padding: 2.5rem;
+    \\    background: #ffffff;
+    \\    border-radius: 12px;
+    \\    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    \\}
+    \\.card {
+    \\    margin-top: 1.5rem;
+    \\    display: flex;
+    \\    justify-content: center;
+    \\    gap: 0.75rem;
+    \\}
+    \\button {
+    \\    padding: 0.6rem 1.4rem;
+    \\    border-radius: 8px;
+    \\    border: 1px solid #0070f3;
+    \\    background: #0070f3;
+    \\    color: white;
+    \\    font-size: 1rem;
+    \\    font-weight: 500;
+    \\    cursor: pointer;
+    \\}
+    \\button:hover {
+    \\    background: #005bb5;
     \\}
     \\</style>
     \\

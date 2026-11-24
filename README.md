@@ -130,40 +130,24 @@ zvelte build
 
 ## 📐 Component Anatomy (`app.zvelte`)
 
+Just like Svelte, declare variables and functions inside `<script>`, and bind them directly in your markup without boilerplate:
+
 ```html
-<script lang="python" context="server">
-from datetime import datetime
+<script lang="python">
+name = "Babar"
+count = 0
 
-name = "Babbar"
-
-def greeting():
-    return f"Hello {name}"
+def greeting(user):
+    return f"Hello {user}! Greetings from Python."
 </script>
-
-<script lang="zig" context="native">
-pub export fn zvelte_double(value: i32) callconv(.c) i32 {
-    return value * 2;
-}
-</script>
-
-<script lang="zig" context="wasm">
-pub export fn zvelte_square(value: i32) callconv(.c) i32 {
-    return value * value;
-}
-</script>
-
-<state>
-count: i32 = 0
-</state>
 
 <main>
-    <h1>{greeting()}</h1>
-    <h2>Count: {count}</h2>
+    <h1>Hello {name}</h1>
+    <p>{greeting(name)}</p>
 
     <button click={count++}>
-        Increment
+        Clicked {count} times
     </button>
-
     <button click={count = 0}>
         Reset
     </button>
@@ -172,14 +156,16 @@ count: i32 = 0
 <style>
 main {
     font-family: system-ui, sans-serif;
-    max-width: 42rem;
+    max-width: 36rem;
     margin: 3rem auto;
     text-align: center;
 }
 button {
     margin: 0.5rem;
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1.2rem;
     border-radius: 6px;
+    background: #0070f3;
+    color: white;
     cursor: pointer;
 }
 </style>

@@ -75,6 +75,21 @@ fn extractScriptFunctions(allocator: Allocator, script: ast.ScriptBlock, func_ma
                     }
                 }
             }
+        } else if (script.lang == .js) {
+            var rest: ?[]const u8 = null;
+            if (std.mem.startsWith(u8, line, "function ")) {
+                rest = line[9..];
+            } else if (std.mem.startsWith(u8, line, "async function ")) {
+                rest = line[15..];
+            }
+            if (rest) |r| {
+                if (std.mem.indexOfScalar(u8, r, '(')) |paren_idx| {
+                    const fn_name = std.mem.trim(u8, r[0..paren_idx], " \t");
+                    if (fn_name.len > 0) {
+                        try func_map.put(fn_name, {});
+                    }
+                }
+            }
         }
     }
 }
@@ -92,12 +107,12 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
     for (comp.scripts) |script| {
         switch (cfg.app.mode) {
             .python => {
-                if (script.lang != .python) {
+                if (script.lang != .python and script.lang != .js) {
                     return SemanticError.ZigBlockNotAllowedInPythonMode;
                 }
             },
             .zig => {
-                if (script.lang != .zig) {
+                if (script.lang != .zig and script.lang != .js) {
                     return SemanticError.PythonBlockNotAllowedInZigMode;
                 }
             },
@@ -120,6 +135,9 @@ pub fn analyze(child_allocator: Allocator, comp: ast.Component, cfg: config.AppC
             std.mem.eql(u8, state.type_name, "f64") or
             std.mem.eql(u8, state.type_name, "bool") or
             std.mem.eql(u8, state.type_name, "string") or
+            std.mem.eql(u8, state.type_name, "any") or
+            std.mem.eql(u8, state.type_name, "dict") or
+            std.mem.eql(u8, state.type_name, "object") or
             std.mem.startsWith(u8, state.type_name, "[]") or
             std.mem.eql(u8, state.type_name, "list") or
             std.mem.eql(u8, state.type_name, "array");

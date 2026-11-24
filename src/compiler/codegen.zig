@@ -50,23 +50,26 @@ pub fn generatePythonWorker(allocator: Allocator, user_code: []const u8, ctypes_
         \\        return {{"error": str(e), "traceback": traceback.format_exc()}}
         \\
         \\def main():
-        \\    while True:
-        \\        line = sys.stdin.readline()
-        \\        if not line:
-        \\            break
-        \\        line = line.strip()
-        \\        if not line:
-        \\            continue
-        \\        try:
-        \\            req = json.loads(line)
-        \\            res = handle_rpc(req)
-        \\            if "id" in req:
-        \\                res["id"] = req["id"]
-        \\            sys.stdout.write(json.dumps(res) + "\n")
-        \\            sys.stdout.flush()
-        \\        except Exception as err:
-        \\            sys.stdout.write(json.dumps({{"error": str(err)}}) + "\n")
-        \\            sys.stdout.flush()
+        \\    try:
+        \\        while True:
+        \\            line = sys.stdin.readline()
+        \\            if not line:
+        \\                break
+        \\            line = line.strip()
+        \\            if not line:
+        \\                continue
+        \\            try:
+        \\                req = json.loads(line)
+        \\                res = handle_rpc(req)
+        \\                if "id" in req:
+        \\                    res["id"] = req["id"]
+        \\                sys.stdout.write(json.dumps(res) + "\n")
+        \\                sys.stdout.flush()
+        \\            except Exception as err:
+        \\                sys.stdout.write(json.dumps({{"error": str(err)}}) + "\n")
+        \\                sys.stdout.flush()
+        \\    except KeyboardInterrupt:
+        \\        sys.exit(0)
         \\
         \\if __name__ == "__main__":
         \\    main()

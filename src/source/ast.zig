@@ -4,10 +4,12 @@ const Allocator = std.mem.Allocator;
 pub const ScriptLang = enum {
     python,
     zig,
+    js,
 
     pub fn fromString(str: []const u8) ?ScriptLang {
-        if (std.mem.eql(u8, str, "python")) return .python;
+        if (std.mem.eql(u8, str, "python") or std.mem.eql(u8, str, "py")) return .python;
         if (std.mem.eql(u8, str, "zig")) return .zig;
+        if (std.mem.eql(u8, str, "js") or std.mem.eql(u8, str, "javascript")) return .js;
         return null;
     }
 };
@@ -16,11 +18,13 @@ pub const ScriptContext = enum {
     server,
     native,
     wasm,
+    client,
 
     pub fn fromString(str: []const u8) ?ScriptContext {
         if (std.mem.eql(u8, str, "server")) return .server;
         if (std.mem.eql(u8, str, "native")) return .native;
         if (std.mem.eql(u8, str, "wasm")) return .wasm;
+        if (std.mem.eql(u8, str, "client")) return .client;
         return null;
     }
 };
