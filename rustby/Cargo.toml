@@ -1,0 +1,12 @@
+[package]
+name = "rustby"
+version = "0.0.4"
+edition = "2024"
+
+[[bin]]
+name = "zvelte-rs"
+path = "src/main.rs"
+
+[lib]
+name = "rustby"
+path = "src/lib.rs"
