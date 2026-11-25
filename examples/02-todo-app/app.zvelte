@@ -1,5 +1,5 @@
 <state>
-todos: []string = ["Install Zig 0.17.1", "Build first Zvelte application", "Deploy fine-grained reactive app"]
+todos: []string = ["Install Zvelte (Rust + Python)", "Build first Zvelte application", "Deploy fine-grained reactive app"]
 completed_tasks: i32 = 1
 new_task: string = ""
 </state>

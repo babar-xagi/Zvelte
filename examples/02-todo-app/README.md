@@ -1,6 +1,6 @@
 # 📝 Example 02: Task Manager App
 
-This example illustrates managing multiple reactive state cells in a UI card component.
+This example illustrates managing lists, conditional banners, and two-way form bindings in Zvelte without Virtual DOM reconciliation.
 
 ## 🚀 Running this Example
 
@@ -13,6 +13,7 @@ Visit [http://127.0.0.1:3002/](http://127.0.0.1:3002/) in your browser.
 
 ## 💡 Key Concepts Demonstrated
 
-- Multiple state cells: `total_tasks: i32 = 3` and `completed_tasks: i32 = 1`.
-- Clean semantic HTML structure with scoped modern CSS.
-- Fast direct updates without Virtual DOM reconciliation.
+- Typed `<state>` declarations: `todos: []string`, `completed_tasks: i32 = 1`, `new_task: string = ""`.
+- Two-way form input binding: `<input ... bind:value={new_task} />`.
+- Dynamic list mutation & scoped rendering: `{#each todos as todo} ... {/each}` with `click={todos.push(new_task); new_task = ""}`.
+- Conditional rendering: `{#if completed_tasks >= todos.length} ... {:else} ... {/if}`.

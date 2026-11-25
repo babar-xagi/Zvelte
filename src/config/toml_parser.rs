@@ -19,6 +19,35 @@ impl std::fmt::Display for TomlError {
 
 impl std::error::Error for TomlError {}
 
+fn strip_toml_comment(val: &str) -> &str {
+    let mut in_double = false;
+    let mut in_single = false;
+    let mut prev_backslash = false;
+
+    for (idx, ch) in val.char_indices() {
+        if in_double {
+            if prev_backslash {
+                prev_backslash = false;
+            } else if ch == '\\' {
+                prev_backslash = true;
+            } else if ch == '"' {
+                in_double = false;
+            }
+        } else if in_single {
+            if ch == '\'' {
+                in_single = false;
+            }
+        } else if ch == '"' {
+            in_double = true;
+        } else if ch == '\'' {
+            in_single = true;
+        } else if ch == '#' {
+            return val[..idx].trim();
+        }
+    }
+    val.trim()
+}
+
 pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
     let mut config = AppConfig::default();
     let mut current_section = String::new();
@@ -38,12 +67,7 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
         // Key = Value
         if let Some(eq_idx) = line.find('=') {
             let key = line[..eq_idx].trim();
-            let mut val_str = line[eq_idx + 1..].trim();
-
-            // Strip trailing comments
-            if let Some(comment_idx) = val_str.find('#') {
-                val_str = val_str[..comment_idx].trim();
-            }
+            let val_str = strip_toml_comment(line[eq_idx + 1..].trim());
 
             let val_unquoted = if (val_str.starts_with('"') && val_str.ends_with('"'))
                 || (val_str.starts_with('\'') && val_str.ends_with('\''))
@@ -110,7 +134,7 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
                     _ => {}
                 },
                 "build" => match key {
-                    "output" => config.build.output = val_unquoted.to_string(),
+                    "output" | "out_dir" => config.build.output = val_unquoted.to_string(),
                     "cache" => config.build.cache = val_unquoted.to_string(),
                     "optimization" => config.build.optimization = val_unquoted.to_string(),
                     "minify" => config.build.minify = val_unquoted == "true",

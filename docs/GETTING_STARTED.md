@@ -1,58 +1,58 @@
 # 🚀 Getting Started with Zvelte
 
-> Step-by-step guide to installing the Zvelte toolchain, scaffolding your first project, running the local development server, and building for production.
+> Step-by-step guide to building and installing the Rust-powered **Zvelte** compiler and creating your first **Python + Svelte** reactive web application.
 
 ---
 
 ## 📋 Prerequisites
 
-Before getting started, make sure your system has:
-
-1. **Zig 0.17.1:**
+1. **Rust Toolchain (`cargo` & `rustc`):** Needed to compile the `zvelte` CLI binary from source (`rustc 1.85+` / Rust 2024 edition).
    ```bash
-   zig version
-   # Expected output: 0.17.1
+   rustc --version
+   cargo --version
    ```
-2. **Python 3.14+ (or 3.15):**
+2. **Python 3.10+:** Powers `<script lang="python">` server workers via CPython JSON-RPC.
    ```bash
    python3 --version
    ```
 3. **Supported Operating Systems:**
-   - Linux (Ubuntu 22.04+, Debian, Fedora, Arch)
-   - WSL2 (Windows Subsystem for Linux)
+   - Linux (Ubuntu 22.04+, Debian, Fedora, Arch) & WSL2
+   - Windows 10 / 11 (see [Windows Setup Guide](WINDOWS_SETUP.md))
    - macOS (Apple Silicon & Intel)
 
 ---
 
-## 🛠️ Step 1: Building & Installing the Zvelte Compiler
+## 🛠️ Step 1: Build & Install Zvelte
 
-Clone the Zvelte repository and compile the native executable:
+Clone the repository and compile the zero-dependency Rust release binary (`~489 KB`):
 
 ```bash
 # 1. Clone the repository
 git clone git@github.com:babar-xagi/Zvelte.git
 cd Zvelte
 
-# 2. Build in release mode
-zig build -Doptimize=ReleaseFast
+# 2. Run unit & integration tests
+cargo test
 
-# 3. Install to your local user binary path
-cp zig-out/bin/zvelte ~/.local/bin/
+# 3. Build optimized release binary
+cargo build --release
 
-# 4. Verify installation
+# 4. Install to your local user bin directory
+mkdir -p ~/.local/bin
+cp target/release/zvelte ~/.local/bin/
+
+# 5. Verify installation
 zvelte --version
 ```
 
-You should see:
+Expected output:
 ```text
-zvelte version 0.0.1
+zvelte version 0.0.6
 ```
 
 ---
 
-## 📦 Step 2: Creating Your First Project
-
-Run `zvelte new` followed by your desired project name:
+## 📦 Step 2: Create Your First Project
 
 ```bash
 zvelte new my-app
@@ -70,25 +70,13 @@ Next steps:
   zvelte dev
 ```
 
-### 🔍 Inspecting the Two Files
-
-Check your project directory:
-
-```bash
-ls -la
-```
-
-Notice that there are **strictly two files**:
-- `app.toml`: All project configuration, server ports, and compiler settings.
-- `app.zvelte`: Your multi-language component containing scripts, reactive state, markup, and styles.
-
-No `package.json`, no `build.zig`, no `node_modules/`, and no cluttered boilerplate.
+Your project directory contains **strictly two files**:
+- `app.toml`: Project settings (`mode = "python"`, port, hot reload, build output).
+- `app.zvelte`: Single-file component with `<script lang="python">`, reactive markup, and CSS.
 
 ---
 
-## 💻 Step 3: Running the Development Server
-
-Start the zero-config development server:
+## 💻 Step 3: Start the Live Development Server
 
 ```bash
 zvelte dev
@@ -96,63 +84,24 @@ zvelte dev
 
 Output:
 ```text
-✔ Zvelte dev server running at http://127.0.0.1:3000/
+  ✔ Python server worker supervisor online
+
+  ✔ Zvelte dev server running at http://127.0.0.1:3000/
 ```
 
-Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/) in your web browser. You will see:
-- Greeting text rendered dynamically from the component.
-- An interactive counter displaying `Count: 0`.
-- **Increment** and **Reset** buttons updating the counter live with zero page reloads.
+Open [http://127.0.0.1:3000/](http://127.0.0.1:3000/) in your browser. Edit `app.zvelte` or `app.toml` and save — Zvelte automatically recompiles, restarts the Python worker, and refreshes your browser tab!
 
 ---
 
-## 🧪 Step 4: Semantic Checking
-
-To inspect your code for type errors, missing state variables, or incompatible script language modes without starting the server, run:
+## 🧪 Step 4: Validate & Build for Production
 
 ```bash
+# Validate syntax and state references
 zvelte check
-```
 
-Output:
-```text
-✔ Check passed: 'my-app' (mode: hybrid, renderer: js, 1 state vars, 3 scripts)
-```
-
----
-
-## 🏗️ Step 5: Building for Production
-
-When you are ready to deploy your application to any static host, CDN, or web server:
-
-```bash
+# Compile production assets to dist/
 zvelte build
-```
 
-Output:
-```text
-Building Zvelte project for production...
-✔ Production build complete in dist/
-  ├── index.html (373 bytes)
-  └── app.js (1545 bytes)
-```
-
-The production assets in `dist/` are fully optimized and ready to serve on GitHub Pages, Vercel, Netlify, Cloudflare Pages, Nginx, or Caddy.
-
----
-
-## 🧹 Step 6: Cleaning Build Artifacts
-
-To remove all generated caches (`.zvelte/`) and production build directories (`dist/`), run:
-
-```bash
+# Clean generated dist/ and .zvelte/ artifacts cleanly
 zvelte clean
 ```
-
-Output:
-```text
-Cleaning Zvelte build artifacts and cache...
-✔ Clean complete. User source files preserved.
-```
-
-Your project directory is returned to its pristine two-file state!

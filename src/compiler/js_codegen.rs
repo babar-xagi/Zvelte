@@ -28,6 +28,35 @@ impl<'a> JsCodegen<'a> {
         format!("{}_{}", prefix, id)
     }
 
+    fn escape_js_string(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 8);
+        for c in s.chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                _ => out.push(c),
+            }
+        }
+        out
+    }
+
+    fn escape_html(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '&' => out.push_str("&amp;"),
+                '<' => out.push_str("&lt;"),
+                '>' => out.push_str("&gt;"),
+                '"' => out.push_str("&quot;"),
+                _ => out.push(c),
+            }
+        }
+        out
+    }
+
     pub fn format_expr(&self, expr: &str) -> String {
         let mut out = String::new();
         let chars: Vec<char> = expr.chars().collect();
@@ -35,6 +64,26 @@ impl<'a> JsCodegen<'a> {
 
         while i < chars.len() {
             let c = chars[i];
+            if c == '"' || c == '\'' || c == '`' {
+                let quote = c;
+                out.push(quote);
+                i += 1;
+                while i < chars.len() {
+                    let sc = chars[i];
+                    out.push(sc);
+                    if sc == '\\' && i + 1 < chars.len() {
+                        i += 1;
+                        out.push(chars[i]);
+                        i += 1;
+                        continue;
+                    }
+                    i += 1;
+                    if sc == quote {
+                        break;
+                    }
+                }
+                continue;
+            }
             if c.is_alphabetic() || c == '_' {
                 let start = i;
                 while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
@@ -122,7 +171,7 @@ impl<'a> JsCodegen<'a> {
 </body>
 </html>
 "#,
-            self.project_name, style_block
+            Self::escape_html(self.project_name), style_block
         )
     }
 
@@ -146,13 +195,21 @@ impl<'a> JsCodegen<'a> {
         sb.push_str(
             r#"  };
 
-  const subscribers = [];
+  let subscribers = [];
+  let __curr_scope = "root";
+  let __scope_seq = 0;
   function subscribe(fn) {
-    subscribers.push(fn);
+    subscribers.push({ fn: fn, scope: __curr_scope });
+  }
+  function __clear_scope(prefix) {
+    subscribers = subscribers.filter(function(s) {
+      return s.scope !== prefix && !s.scope.startsWith(prefix + "/");
+    });
   }
   function update() {
-    for (let i = 0; i < subscribers.length; i++) {
-      subscribers[i]();
+    const snapshot = subscribers.slice();
+    for (let i = 0; i < snapshot.length; i++) {
+      snapshot[i].fn();
     }
   }
 
@@ -287,7 +344,9 @@ impl<'a> JsCodegen<'a> {
                     } else {
                         sb.push_str(&format!(
                             "    {}.setAttribute(\"{}\", \"{}\");\n",
-                            el_var, attr.name, attr.value
+                            el_var,
+                            Self::escape_js_string(&attr.name),
+                            Self::escape_js_string(&attr.value)
                         ));
                     }
                 }
@@ -344,7 +403,7 @@ impl<'a> JsCodegen<'a> {
             }
             NodeType::Text => {
                 let txt_var = self.next_var("txt");
-                let escaped = node.content.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+                let escaped = Self::escape_js_string(&node.content);
                 sb.push_str(&format!(
                     "    const {} = document.createTextNode(\"{}\");\n",
                     txt_var, escaped
@@ -367,6 +426,7 @@ impl<'a> JsCodegen<'a> {
             }
             NodeType::IfBlock => {
                 let if_container = self.next_var("if_cont");
+                let scope_var = self.next_var("__scope");
                 sb.push_str(&format!(
                     "    const {} = document.createElement(\"span\");\n",
                     if_container
@@ -375,12 +435,21 @@ impl<'a> JsCodegen<'a> {
                     "    {}.style.display = \"contents\";\n",
                     if_container
                 ));
+                sb.push_str(&format!(
+                    "    const {} = __curr_scope + \"/if_\" + (++__scope_seq);\n",
+                    scope_var
+                ));
 
                 let cond_expr = node.condition.as_deref().unwrap_or("true");
                 let formatted_cond = self.format_expr(cond_expr);
 
                 let render_fn = self.next_var("__render_if");
+                let prev_scope = self.next_var("__prev_scope");
                 sb.push_str(&format!("    function {}() {{\n", render_fn));
+                sb.push_str(&format!("      __clear_scope({});\n", scope_var));
+                sb.push_str(&format!("      const {} = __curr_scope;\n", prev_scope));
+                sb.push_str(&format!("      __curr_scope = {};\n", scope_var));
+                sb.push_str("      try {\n");
                 sb.push_str(&format!("      {}.innerHTML = \"\";\n", if_container));
                 sb.push_str(&format!("      if ({}) {{\n", formatted_cond));
 
@@ -397,6 +466,7 @@ impl<'a> JsCodegen<'a> {
                     }
                 }
                 sb.push_str("      }\n");
+                sb.push_str(&format!("      }} finally {{ __curr_scope = {}; }}\n", prev_scope));
                 sb.push_str("    }\n");
 
                 sb.push_str(&format!("    {}();\n", render_fn));
@@ -406,6 +476,7 @@ impl<'a> JsCodegen<'a> {
             }
             NodeType::EachBlock => {
                 let each_container = self.next_var("each_cont");
+                let scope_var = self.next_var("__scope");
                 sb.push_str(&format!(
                     "    const {} = document.createElement(\"span\");\n",
                     each_container
@@ -414,21 +485,28 @@ impl<'a> JsCodegen<'a> {
                     "    {}.style.display = \"contents\";\n",
                     each_container
                 ));
+                sb.push_str(&format!(
+                    "    const {} = __curr_scope + \"/each_\" + (++__scope_seq);\n",
+                    scope_var
+                ));
 
                 let col_expr = node.collection.as_deref().unwrap_or("[]");
                 let formatted_col = self.format_expr(col_expr);
                 let item_name = node.item_name.as_deref().unwrap_or("item");
 
                 let render_fn = self.next_var("__render_each");
+                let prev_scope = self.next_var("__prev_scope");
                 sb.push_str(&format!("    function {}() {{\n", render_fn));
+                sb.push_str(&format!("      __clear_scope({});\n", scope_var));
+                sb.push_str(&format!("      const {} = __curr_scope;\n", prev_scope));
+                sb.push_str(&format!("      __curr_scope = {};\n", scope_var));
+                sb.push_str("      try {\n");
                 sb.push_str(&format!("      {}.innerHTML = \"\";\n", each_container));
                 sb.push_str(&format!(
                     "      const __list = {} || [];\n",
                     formatted_col
                 ));
-                sb.push_str(&format!(
-                    "      for (let __idx = 0; __idx < __list.len || __idx < __list.length; __idx++) {{\n"
-                ));
+                sb.push_str("      for (let __idx = 0; __idx < __list.length; __idx++) {\n");
                 sb.push_str(&format!("        const {} = __list[__idx];\n", item_name));
 
                 for child in &node.children {
@@ -436,6 +514,7 @@ impl<'a> JsCodegen<'a> {
                     sb.push_str(&format!("        {}.appendChild({});\n", each_container, child_var));
                 }
                 sb.push_str("      }\n");
+                sb.push_str(&format!("      }} finally {{ __curr_scope = {}; }}\n", prev_scope));
                 sb.push_str("    }\n");
 
                 sb.push_str(&format!("    {}();\n", render_fn));

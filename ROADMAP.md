@@ -1,6 +1,6 @@
-# 🗺️ Zvelte Technical Roadmap & Phase-by-Phase Execution Plan
+# 🗺️ Zvelte Technical Roadmap
 
-> Official technical roadmap for **Zvelte**: A Zig-powered, multi-language reactive web framework with Python and Zig source blocks, a shared component format, and JavaScript/WebAssembly execution backends.
+> Official technical roadmap for **Zvelte**: A Python reactive web framework powered by a zero-dependency Rust compiler and runtime engine.
 
 ---
 
@@ -8,105 +8,50 @@
 
 | Milestone | Target Scope | Status |
 |---|---|---|
-| **`v0.0.1`** | **CLI, Two-File Scaffolding, TOML Loader, SFC Parser, Fine-Grained Reactive JS Codegen, Embedded Dev Server** | **✅ Released** |
-| **`v0.0.2`** | **Advanced Expression Parser, Conditional Rendering (`if`/`else`), Keyed List Rendering (`for`/`each`), Two-Way Form Input Bindings (`bind:value`)** | **✅ Released** |
-| **`v0.0.3`** | **Python Server Worker Process Integration & Line-Buffered JSON-RPC IPC Bridge (Client Async Proxies & Promise-Aware Reactive Updates)** | **✅ Released** |
-| **`v0.0.4`** | **Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker** | **✅ Released** |
-| `v0.0.5` | Zig Browser WebAssembly Compilation (`wasm32-freestanding`) & JS Host Adapter | ⏳ Next |
-| `v0.1.0` | Production Optimization, Benchmark Suite, Stable Core Release | 🎯 Milestone |
+| **`v0.0.1`** | **CLI, Two-File Scaffolding, TOML Loader, SFC Parser, Reactive JS Codegen, Dev Server** | **✅ Released** |
+| **`v0.0.2`** | **Conditional Rendering (`{#if}`/`{:else}`), List Rendering (`{#each}`), Form Bindings (`bind:value`, `bind:checked`)** | **✅ Released** |
+| **`v0.0.3`** | **Python Server Worker Supervisor & Line-Buffered JSON-RPC Bridge (`POST /api/rpc`)** | **✅ Released** |
+| **`v0.0.4`** | **Native C-ABI Shared Library Compilation, `ctypes` Linker, Svelte Ergonomics & Port Fallback** | **✅ Released** |
+| **`v0.0.5`** | **Full Rust Core Rewrite (`std`-only), Python-First Scaffold & `examples/03-python-api`** | **✅ Released** |
+| **`v0.0.6`** | **Live Hot Reload Watcher, Scoped Reactivity Cleanup, Server Secret Isolation, Full Test Suite** | **✅ Released** |
+| `v0.1.0` | Stable Core Release: Client JS State Transform, Minification, XSS Audit, Multi-Component Imports | 🎯 Next |
 
 ---
 
-## 📋 Comprehensive Phase Roadmap
+## 📋 Completed Core Engine Phases
 
-### Phase 0 — Toolchain Baseline & Environment Verification
-- [x] Verify Zig `0.17.1` runtime and compiler target support (`x86_64-linux`).
-- [x] Verify CPython `3.14`/`3.15` and `ctypes` interoperability.
-- [x] Verify WebAssembly compilation target (`wasm32-freestanding`).
-- [x] Initialize native build system with `build.zig` and `build.zig.zon`.
+### Phase 1 — Rust Core CLI & Strict Two-File Scaffolding
+- [x] Zero-dependency Rust CLI (`zvelte` & `zvelte-rs`) built exclusively on Rust `std`.
+- [x] Commands: `new`, `check`, `build`, `dev`, `clean`, `--version`, `--help`.
+- [x] Strict two-file guarantee (`app.toml` + `app.zvelte`), project name validation, overwrite protection.
 
-### Phase 1 — CLI Foundation & Strict Two-File Scaffolding
-- [x] Implement CLI argument parsing for `new`, `check`, `build`, `dev`, `clean`, `--version`, `--help`.
-- [x] Implement project name sanitization and directory traversal protection.
-- [x] Enforce directory overwrite protection.
-- [x] **Enforce Two-File Guarantee:** `zvelte new <app>` produces strictly `app.toml` and `app.zvelte`.
-- [x] Unit test verifying no third initial file is ever created.
+### Phase 2 — TOML Configuration & Multi-Mode Validation
+- [x] Quote-aware zero-dep TOML parser supporting `[project]`, `[app]`, `[toolchain]`, `[python]`, `[rust]`, `[dev]`, `[build]`.
+- [x] Configurable build output (`[build] output`), Python binary (`[python] executable`), and dev hot reload (`[dev] hot_reload`).
 
-### Phase 2 — TOML Configuration Parser & Validation
-- [x] Zero-dependency TOML parser (`[project]`, `[app]`, `[toolchain]`, `[python]`, `[zig]`, `[dev]`, `[build]`).
-- [x] Typed `AppConfig` struct with strict validation.
-- [x] Mode enforcement: `"python"`, `"zig"`, and `"hybrid"`.
-- [x] Detailed error diagnostics with line locations.
+### Phase 3 — `.zvelte` Parser & Semantic Analyzer
+- [x] Raw `<script>` parsing with Svelte-style defaults (`<script>` -> JS client, `<script lang="python">` -> Python server, `<script lang="rust">` -> Rust native).
+- [x] HTML comment skipping (`<!-- ... -->`) and quote-aware brace expression scanning.
+- [x] Literal-only auto-state extraction so Python server calls (`os.getenv(...)`) stay strictly off the client bundle.
+- [x] `{#if}`/`{:else}`, `{#each}`, `bind:value`, `bind:checked`, and typed `<state>` parsing.
 
-### Phase 3 — Single-File Component (`.zvelte`) Grammar & Parser
-- [x] Raw script block isolation for `<script lang="..." context="...">` avoiding tag collision.
-- [x] Typed `<state>` block parser.
-- [x] Component element tree parser with attribute and event extraction.
-- [x] Dynamic expression (`{...}`) and event binding (`event={...}`) parser.
-- [x] Scoped `<style>` extraction.
+### Phase 4 — Scoped Reactive JS Codegen & CPython RPC Runtime
+- [x] Direct DOM creation with hierarchical subscriber scope disposal (`__clear_scope`) — zero Virtual DOM overhead.
+- [x] Supervised CPython child worker (`worker.py`) over line-buffered `stdin`/`stdout` JSON-RPC (`POST /api/rpc`).
+- [x] Promise-aware DOM text resolution (`__setNodeText`) and Windows CRLF-safe string escaping.
+- [x] Optional native Rust C-ABI compilation (`rustc --crate-type cdylib -O`) + `ctypes` bindings in `hybrid` / `rust` modes.
 
-### Phase 4 — Semantic Analysis & Symbol Validation
-- [x] Validate script block languages against project `mode`.
-- [x] Build state variable symbol table with uniqueness and type validation.
-- [x] Check event handler expressions against declared state variables.
-
-### Phase 5 — Static & Fine-Grained Reactive JavaScript Generator
-- [x] HTML shell generation with scoped CSS injection.
-- [x] Direct DOM creation (no Virtual DOM overhead).
-- [x] Fine-grained reactive dependency tracking (`subscribe(...)` targeting specific text cells).
-- [x] Event listener generation (`addEventListener`).
-
-### Phase 6 — Development Server & Build Pipeline
-- [x] Embedded zero-dependency HTTP server in Zig (`127.0.0.1:3000`).
-- [x] Serving HTML and JS with standard MIME headers.
-- [x] Production build pipeline emitting to `dist/index.html` and `dist/app.js`.
-- [x] `zvelte clean` restoring workspace cleanly.
+### Phase 5 — Cross-Platform DevServer & Live Hot Reload
+- [x] Cross-platform `std::net::TcpListener` HTTP server with automatic fallback across `port..port+9`.
+- [x] File-watcher hot reload monitoring `app.toml` and entry `.zvelte`, rebuilding `.zvelte/dev`, restarting `worker.py`, and notifying browsers via `/__zvelte_version`.
 
 ---
 
-### Upcoming Phases (Post v0.0.1)
+## 🔮 Upcoming Work (`v0.1.0`)
 
-#### Phase 8 — Template Language Essentials (v0.0.2)
-- [x] Conditional rendering blocks (`{#if condition} ... {:else} ... {/if}`).
-- [x] Keyed list rendering blocks (`{#each items as item (item.id)} ... {/each}`).
-- [x] Form two-way input binding (`bind:value={name}` and `bind:checked={flag}`).
-- [x] Advanced Expression Parser for state mutations, condition evaluations, and expressions.
-- [x] Extended `<state>` data type support for array/slice collections (`[]string`, `list`, `array`).
-
-#### Phase 9 — Zig Native Acceleration Modules (v0.0.4)
-- [x] Auto-compile `<script lang="zig" context="native">` into host native shared library (`libnative.so` / `libnative.dylib` / `native.dll`) via `zig build-lib -dynamic -O ReleaseFast`.
-- [x] C-ABI function export parser and symbol extractor (`export fn ... callconv(.c)`).
-- [x] Automatic Python `ctypes` wrapper generator with typed `argtypes`, `restype`, and numeric argument coercion.
-- [x] Python worker integration injecting native Zig C-ABI bindings into Python server `globals()`.
-- [x] Client-side asynchronous RPC proxy generation exposing native Zig functions to browser JavaScript (`async function <fn_name>(...args)`).
-- [x] CLI `check`, `build`, and `clean` commands updated to handle native shared libraries and artifacts with recursive tree cleanup.
-
-#### Phase 10 — CPython Server Worker & Supervisor (v0.0.3)
-- [x] Auto-generate standard-library-only `worker.py` encapsulating user server functions with line-buffered JSON-RPC protocol.
-- [x] Spawn and supervise child CPython worker (`python3 -u`) from Zig dev server with non-blocking pipe I/O.
-- [x] HTTP JSON-RPC endpoint (`POST /api/rpc`) with CORS `OPTIONS` handling and sub-millisecond local dispatch.
-- [x] Client-side asynchronous JavaScript RPC proxy generator (`async function <fn_name>(...args)`) exposing Python functions globally.
-- [x] Promise-aware fine-grained text node reactivity (`__setNodeText`) resolving async Python returns directly into the DOM.
-- [x] Semantic analyzer validation permitting declared Python server functions in event expressions and bindings.
-- [x] Clean child process termination (SIGTERM / terminate) and pipe closure on dev server exit and error unwind.
-- [x] Production build pipeline integration emitting `worker.py` in `dist/` with detailed asset size reporting.
-
-#### Phase 11 — Zig WebAssembly Browser Modules
-- [ ] Auto-compile `<script lang="zig" context="wasm">` to WebAssembly.
-- [ ] Browser JavaScript WASM loader and scalar memory adapter.
-
-#### Phase 12 — WebAssembly DOM Host Runtime
-- [ ] Versioned JavaScript host adapter for WebAssembly DOM operations.
-- [ ] Batch mutation bridging to minimize JS-WASM boundary crossings.
-
-#### Phase 13 — Production Optimizations & Asset Bundling
-- [ ] Minification and tree-shaking for generated JavaScript.
-- [ ] Content-hashed asset naming for caching.
-
-#### Phase 14 — Security Hardening & Penetration Testing
-- [ ] Strict text node escaping preventing XSS injection.
-- [ ] Input payload validation across Python and Zig boundaries.
-
-#### Phase 15 — Benchmarking Suite & 0.1.0 Stable Release
-- [ ] Performance benchmarks comparing initial render latency, DOM update speed, and memory usage against vanilla JS and modern frameworks.
-- [ ] Documentation and tutorial finalization.
+- [ ] **Compiled Client `<script>` Reactivity:** Rewrite client `<script>` variable mutations (`count++` inside user helper functions) to mutate `state.count`.
+- [ ] **JavaScript & CSS Minification:** Implement production minifier wired to `[build] minify = true` and content-hashed asset filenames.
+- [ ] **HTML Attribute & Text Interpolation Validation:** Extend semantic analyzer validation to `{expr}` dynamic text and attribute bindings.
+- [ ] **Multi-Component Imports:** Support importing child `.zvelte` components.
+- [ ] **WebAssembly Target (`renderer = "wasm"` / `context="wasm"`):** Compile browser compute modules to `wasm32` when enabled.
+- [ ] **Automated XSS Hardening:** Ensure dynamic HTML attributes and URLs are sanitized before DOM insertion.

@@ -119,7 +119,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             project: ProjectConfig {
-                name: "rustby-app".to_string(),
+                name: "zvelte-app".to_string(),
                 version: "0.1.0".to_string(),
                 entry: "app.zvelte".to_string(),
             },
@@ -153,7 +153,7 @@ impl Default for AppConfig {
             },
             build: BuildConfig {
                 output: "dist".to_string(),
-                cache: ".rustby".to_string(),
+                cache: ".zvelte".to_string(),
                 optimization: "release".to_string(),
                 minify: false,
                 source_maps: true,

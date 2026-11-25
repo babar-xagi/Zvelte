@@ -5,25 +5,14 @@ entry = "app.zvelte"
 
 [app]
 target = "web"
-mode = "hybrid"
+mode = "python"
 renderer = "js"
 strict = true
-
-[toolchain]
-zig = "0.17.1"
-python = "3.15"
 
 [python]
 enabled = false
 executable = "python3"
-execution = "server"
-zig_acceleration = false
-
-[zig]
-enabled = true
-executable = "zig"
-native_modules = false
-wasm_modules = false
+version = "3.10+"
 
 [dev]
 host = "127.0.0.1"
@@ -34,6 +23,6 @@ open_browser = false
 [build]
 output = "dist"
 cache = ".zvelte"
-optimization = "debug"
+optimization = "release"
 minify = false
 source_maps = true

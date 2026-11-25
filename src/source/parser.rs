@@ -109,6 +109,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn skip_html_comment(&mut self) -> Result<bool, ParseError> {
+        if !self.starts_with("<!--") {
+            return Ok(false);
+        }
+        self.consume_prefix("<!--");
+        while self.pos < self.chars.len() {
+            if self.starts_with("-->") {
+                self.consume_prefix("-->");
+                return Ok(true);
+            }
+            self.advance();
+        }
+        Err(ParseError::UnexpectedEOF)
+    }
+
     pub fn parse(&mut self) -> Result<Component, ParseError> {
         let mut scripts = Vec::new();
         let mut states = Vec::new();
@@ -121,7 +136,9 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            if self.starts_with("<script") {
+            if self.starts_with("<!--") {
+                self.skip_html_comment()?;
+            } else if self.starts_with("<script") {
                 let script = self.parse_script_block()?;
                 scripts.push(script);
             } else if self.starts_with("<state>") {
@@ -194,17 +211,17 @@ impl<'a> Parser<'a> {
             if self.peek() == Some('=') {
                 self.advance();
                 self.skip_whitespace();
-                if self.peek() == Some('"') {
-                    self.advance();
+                if matches!(self.peek(), Some('"') | Some('\'')) {
+                    let quote = self.advance().unwrap();
                     let mut val = String::new();
                     while let Some(c) = self.peek() {
-                        if c == '"' {
+                        if c == quote {
                             break;
                         }
                         val.push(c);
                         self.advance();
                     }
-                    if self.peek() == Some('"') {
+                    if self.peek() == Some(quote) {
                         self.advance();
                     }
 
@@ -260,6 +277,163 @@ impl<'a> Parser<'a> {
         }
 
         Err(ParseError::UnterminatedScript)
+    }
+
+    fn scan_quoted_string(s: &str) -> Option<(usize, char)> {
+        let mut chars = s.char_indices();
+        let (_, quote) = chars.next()?;
+        if quote != '"' && quote != '\'' {
+            return None;
+        }
+        let mut escaped = false;
+        for (idx, c) in chars {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == quote {
+                return Some((idx, quote));
+            }
+        }
+        None
+    }
+
+    fn normalize_safe_literal(raw: &str) -> Option<(String, String)> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if trimmed == "True" || trimmed == "true" {
+            return Some(("true".to_string(), "bool".to_string()));
+        }
+        if trimmed == "False" || trimmed == "false" {
+            return Some(("false".to_string(), "bool".to_string()));
+        }
+        if trimmed == "None" || trimmed == "null" {
+            return Some(("null".to_string(), "any".to_string()));
+        }
+        // Quoted string literal covering entire trimmed slice (no trailing + / method calls)
+        if let Some((end_idx, quote)) = Self::scan_quoted_string(trimmed) {
+            if end_idx + quote.len_utf8() == trimmed.len() {
+                let inner = &trimmed[1..end_idx];
+                if inner.contains('\n') || inner.contains('\r') {
+                    return None;
+                }
+                if quote == '\'' {
+                    let converted = inner.replace("\\'", "'").replace('"', "\\\"");
+                    return Some((format!("\"{}\"", converted), "string".to_string()));
+                } else {
+                    return Some((trimmed.to_string(), "string".to_string()));
+                }
+            }
+            return None;
+        }
+        // Safe ASCII numeric literal
+        if !trimmed.is_empty()
+            && trimmed
+                .bytes()
+                .all(|b| b.is_ascii_digit() || b == b'-' || b == b'.')
+            && trimmed.parse::<f64>().ok().is_some_and(|n| n.is_finite())
+        {
+            let type_name = if trimmed.contains('.') { "f32" } else { "i32" };
+            return Some((trimmed.to_string(), type_name.to_string()));
+        }
+        // Simple literal array or object literal on single line (skip comprehensions or fn calls)
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let inner = trimmed[1..trimmed.len() - 1].trim();
+            if inner.is_empty() {
+                return Some(("[]".to_string(), "list".to_string()));
+            }
+            let items = Self::split_top_level_comma(inner)?;
+            let mut normalized = Vec::with_capacity(items.len());
+            for item in items {
+                let (norm, _) = Self::normalize_safe_literal(item)?;
+                normalized.push(norm);
+            }
+            return Some((format!("[{}]", normalized.join(", ")), "list".to_string()));
+        }
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let inner = trimmed[1..trimmed.len() - 1].trim();
+            if inner.is_empty() {
+                return Some(("{}".to_string(), "dict".to_string()));
+            }
+            let pairs = Self::split_top_level_comma(inner)?;
+            let mut normalized = Vec::with_capacity(pairs.len());
+            for pair in pairs {
+                let colon = Self::find_top_level_colon(pair)?;
+                let (k_norm, k_ty) = Self::normalize_safe_literal(&pair[..colon])?;
+                if k_ty != "string" {
+                    return None;
+                }
+                let (v_norm, _) = Self::normalize_safe_literal(&pair[colon + 1..])?;
+                normalized.push(format!("{}: {}", k_norm, v_norm));
+            }
+            return Some((format!("{{{}}}", normalized.join(", ")), "dict".to_string()));
+        }
+        None
+    }
+
+    fn split_top_level_comma(s: &str) -> Option<Vec<&str>> {
+        let mut parts = Vec::new();
+        let mut depth = 0usize;
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
+        let mut start = 0usize;
+
+        for (idx, c) in s.char_indices() {
+            if let Some(q) = in_quote {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == q {
+                    in_quote = None;
+                }
+            } else {
+                match c {
+                    '"' | '\'' => in_quote = Some(c),
+                    '[' | '{' | '(' => depth += 1,
+                    ']' | '}' | ')' => depth = depth.checked_sub(1)?,
+                    ',' if depth == 0 => {
+                        let piece = s[start..idx].trim();
+                        if !piece.is_empty() {
+                            parts.push(piece);
+                        }
+                        start = idx + 1;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if depth != 0 || in_quote.is_some() {
+            return None;
+        }
+        let tail = s[start..].trim();
+        if !tail.is_empty() {
+            parts.push(tail);
+        }
+        Some(parts)
+    }
+
+    fn find_top_level_colon(s: &str) -> Option<usize> {
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
+        for (idx, c) in s.char_indices() {
+            if let Some(q) = in_quote {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == q {
+                    in_quote = None;
+                }
+            } else if c == '"' || c == '\'' {
+                in_quote = Some(c);
+            } else if c == ':' {
+                return Some(idx);
+            }
+        }
+        None
     }
 
     fn extract_script_state_variables(states: &mut Vec<StateVar>, script: &ScriptBlock) {
@@ -349,31 +523,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            let mut initial_val = raw_rhs.to_string();
-            let mut type_name = "any".to_string();
-
-            if raw_rhs == "True" {
-                initial_val = "true".to_string();
-                type_name = "bool".to_string();
-            } else if raw_rhs == "False" {
-                initial_val = "false".to_string();
-                type_name = "bool".to_string();
-            } else if raw_rhs == "None" || raw_rhs == "null" {
-                initial_val = "null".to_string();
-                type_name = "any".to_string();
-            } else if raw_rhs.starts_with('\'') && raw_rhs.ends_with('\'') && raw_rhs.len() >= 2 {
-                let inner = &raw_rhs[1..raw_rhs.len() - 1];
-                initial_val = format!("\"{}\"", inner);
-                type_name = "string".to_string();
-            } else if raw_rhs.starts_with('"') && raw_rhs.ends_with('"') && raw_rhs.len() >= 2 {
-                type_name = "string".to_string();
-            } else if raw_rhs.starts_with('[') && raw_rhs.ends_with(']') {
-                type_name = "list".to_string();
-            } else if raw_rhs.starts_with('{') && raw_rhs.ends_with('}') {
-                type_name = "dict".to_string();
-            } else if raw_rhs.parse::<f64>().is_ok() {
-                type_name = if raw_rhs.contains('.') { "f32".to_string() } else { "i32".to_string() };
-            }
+            // Strictly auto-extract ONLY safe JSON/JS literals for server/native scripts
+            // (so Python runtime expressions like os.getenv(...) NEVER leak or crash browser JS!)
+            let (initial_val, type_name) = match Self::normalize_safe_literal(raw_rhs) {
+                Some(pair) => pair,
+                None => continue,
+            };
 
             if !states.iter().any(|s| s.name == raw_lhs) {
                 states.push(StateVar {
@@ -485,46 +640,31 @@ impl<'a> Parser<'a> {
                 self.skip_whitespace();
 
                 if self.peek() == Some('{') {
-                    self.advance();
-                    let mut expr = String::new();
-                    let mut brace_depth = 1;
-                    while let Some(c) = self.peek() {
-                        if c == '{' {
-                            brace_depth += 1;
-                        } else if c == '}' {
-                            brace_depth -= 1;
-                            if brace_depth == 0 {
-                                self.advance();
-                                break;
-                            }
-                        }
-                        expr.push(c);
-                        self.advance();
-                    }
+                    let expr = self.read_braced_expression()?;
 
                     if let Some(prop) = attr_name.strip_prefix("bind:") {
                         bindings.push(Binding {
                             property: prop.to_string(),
-                            variable: expr.trim().to_string(),
+                            variable: expr,
                             line: start_line,
                         });
                     } else if matches!(attr_name.as_str(), "click" | "input" | "change" | "submit" | "keydown" | "keyup") {
                         events.push(EventBinding {
                             event_name: attr_name,
-                            expression: expr.trim().to_string(),
+                            expression: expr,
                             line: start_line,
                         });
                     } else {
                         attributes.push(Attribute {
                             name: attr_name,
-                            value: format!("{{{}}}", expr.trim()),
+                            value: format!("{{{}}}", expr),
                         });
                     }
-                } else if self.peek() == Some('"') {
-                    self.advance();
+                } else if matches!(self.peek(), Some('"') | Some('\'')) {
+                    let quote = self.advance().unwrap();
                     let mut val = String::new();
                     while let Some(c) = self.peek() {
-                        if c == '"' {
+                        if c == quote {
                             self.advance();
                             break;
                         }
@@ -597,6 +737,8 @@ impl<'a> Parser<'a> {
                     expected: tag,
                     found,
                 });
+            } else if self.starts_with("<!--") {
+                self.skip_html_comment()?;
             } else if self.starts_with("{#if") {
                 let node = self.parse_if_block()?;
                 children.push(node);
@@ -625,25 +767,34 @@ impl<'a> Parser<'a> {
         Err(ParseError::UnexpectedEOF)
     }
 
-    fn parse_interpolation(&mut self) -> Result<Node, ParseError> {
-        let line = self.line;
-        self.advance(); // consume '{'
+    fn read_braced_expression(&mut self) -> Result<String, ParseError> {
+        self.advance(); // consume opening '{'
         let mut expr = String::new();
-        let mut depth = 1;
+        let mut depth = 1usize;
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
 
         while let Some(c) = self.peek() {
-            if c == '{' {
-                depth += 1;
-            } else if c == '}' {
-                depth -= 1;
-                if depth == 0 {
-                    self.advance();
-                    return Ok(Node {
-                        node_type: NodeType::DynamicText,
-                        content: expr.trim().to_string(),
-                        line,
-                        ..Default::default()
-                    });
+            if let Some(q) = in_quote {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == q {
+                    in_quote = None;
+                }
+            } else {
+                match c {
+                    '"' | '\'' | '`' => in_quote = Some(c),
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.advance();
+                            return Ok(expr.trim().to_string());
+                        }
+                    }
+                    _ => {}
                 }
             }
             expr.push(c);
@@ -651,6 +802,17 @@ impl<'a> Parser<'a> {
         }
 
         Err(ParseError::UnexpectedEOF)
+    }
+
+    fn parse_interpolation(&mut self) -> Result<Node, ParseError> {
+        let line = self.line;
+        let expr = self.read_braced_expression()?;
+        Ok(Node {
+            node_type: NodeType::DynamicText,
+            content: expr,
+            line,
+            ..Default::default()
+        })
     }
 
     fn parse_if_block(&mut self) -> Result<Node, ParseError> {
@@ -686,18 +848,24 @@ impl<'a> Parser<'a> {
             } else if self.starts_with("{:else}") {
                 self.consume_prefix("{:else}");
                 in_else = true;
+            } else if self.starts_with("<!--") {
+                self.skip_html_comment()?;
             } else if self.starts_with("{#if") {
                 let sub = self.parse_if_block()?;
                 if in_else { alternate.push(sub); } else { consequent.push(sub); }
             } else if self.starts_with("{#each") {
                 let sub = self.parse_each_block()?;
                 if in_else { alternate.push(sub); } else { consequent.push(sub); }
-            } else if self.peek() == Some('<') && !self.starts_with("</") {
+            } else if self.starts_with("</") {
+                return Err(ParseError::UnterminatedIfBlock);
+            } else if self.peek() == Some('<') {
                 let sub = self.parse_element()?;
                 if in_else { alternate.push(sub); } else { consequent.push(sub); }
             } else if self.peek() == Some('{') && !self.starts_with("{/") && !self.starts_with("{:") {
                 let sub = self.parse_interpolation()?;
                 if in_else { alternate.push(sub); } else { consequent.push(sub); }
+            } else if self.peek() == Some('{') {
+                return Err(ParseError::UnterminatedIfBlock);
             } else {
                 let text = self.parse_text();
                 if !text.is_empty() {
@@ -756,18 +924,24 @@ impl<'a> Parser<'a> {
                     line: start_line,
                     ..Default::default()
                 });
+            } else if self.starts_with("<!--") {
+                self.skip_html_comment()?;
             } else if self.starts_with("{#if") {
                 let sub = self.parse_if_block()?;
                 children.push(sub);
             } else if self.starts_with("{#each") {
                 let sub = self.parse_each_block()?;
                 children.push(sub);
-            } else if self.peek() == Some('<') && !self.starts_with("</") {
+            } else if self.starts_with("</") {
+                return Err(ParseError::UnterminatedEachBlock);
+            } else if self.peek() == Some('<') {
                 let sub = self.parse_element()?;
                 children.push(sub);
             } else if self.peek() == Some('{') && !self.starts_with("{/") {
                 let sub = self.parse_interpolation()?;
                 children.push(sub);
+            } else if self.peek() == Some('{') {
+                return Err(ParseError::UnterminatedEachBlock);
             } else {
                 let text = self.parse_text();
                 if !text.is_empty() {

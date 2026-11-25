@@ -1,13 +1,13 @@
 # 🛠️ Zvelte CLI Reference Manual
 
-> Complete command-line interface documentation for the `zvelte` compiler and toolchain.
+> Command-line interface documentation for `zvelte` (and its `zvelte-rs` alias).
 
 ---
 
 ## 💻 Synopsis
 
 ```bash
-zvelte <command> [arguments] [options]
+zvelte <command> [path]
 ```
 
 ---
@@ -16,98 +16,40 @@ zvelte <command> [arguments] [options]
 
 | Command | Arguments | Description |
 |---|---|---|
-| `zvelte new` | `<project-name>` | Creates a new Zvelte project containing strictly `app.toml` and `app.zvelte`. |
-| `zvelte check` | `[path]` | Validates configuration, parses SFC grammar, and runs semantic checks. |
-| `zvelte build` | `[path]` | Compiles production assets into the configured `dist/` directory. |
-| `zvelte dev` | `[path]` | Starts the embedded HTTP development server on `127.0.0.1:3000`. |
-| `zvelte clean` | `[path]` | Safely removes generated output directories (`dist/`, `.zvelte/`). |
-| `zvelte --version` | None | Displays the installed Zvelte compiler version. |
-| `zvelte --help` | None | Displays the help menu with all available subcommands. |
+| `zvelte new` | `<project-name>` | Creates a new Python-first Zvelte project with strictly `app.toml` and `app.zvelte`. |
+| `zvelte check` | `[path]` | Parses `app.toml` and `.zvelte` and runs semantic validation without generating outputs. |
+| `zvelte build` | `[path]` | Compiles production assets into `[build] output` (default: `dist/`). |
+| `zvelte dev` | `[path]` | Starts the Rust HTTP dev server with port fallback, hot reload watching, and CPython RPC supervisor. |
+| `zvelte clean` | `[path]` | Removes configured build output, cache (`.zvelte/`), and legacy `.rustby/` while preserving source files. |
+| `zvelte --version` | None | Prints `zvelte version 0.0.6`. |
+| `zvelte --help` | None | Displays usage help. |
 
 ---
 
 ## 📌 Detailed Command Specifications
 
 ### `zvelte new <project-name>`
-Scaffolds a new application workspace conforming strictly to the **Two-File Contract**.
-
-#### Usage
-```bash
-zvelte new my-app
-```
-
-#### Behavior & Invariants
-- Validates that `<project-name>` contains only alphanumeric characters, dashes, or underscores.
-- Rejects directory traversal paths such as `../escape` or `foo/bar`.
-- Checks if the destination directory already exists:
-  - **Refuses to overwrite** an existing directory or any existing files.
-- Generates **strictly two files**:
-  ```text
-  my-app/
-  ├── app.toml
-  └── app.zvelte
-  ```
-- Does **not** generate `src/`, `package.json`, `build.zig`, `requirements.txt`, `.gitignore`, or `README.md`.
-
----
+Scaffolds a workspace conforming strictly to the **Two-File Contract**:
+- Allows only ASCII alphanumeric characters, `-`, and `_` (1–128 chars; rejects `/`, `\`, `.`, `..`).
+- Refuses to overwrite an existing directory.
+- Emits strictly `app.toml` (`mode = "python"`) and `app.zvelte`.
 
 ### `zvelte check [path]`
-Parses, type-checks, and validates configuration and component syntax without starting the server.
-
-#### Usage
-```bash
-# In project root:
-zvelte check
-
-# In a specific directory:
-zvelte check ./my-app
-```
-
-#### Validations Performed
-- **Configuration:** Ensures `app.toml` is syntactically valid and has all required sections.
-- **Mode Matching:** Verifies that declared `<script>` languages comply with `app.mode`.
-- **State Table:** Asserts that all `<state>` cells declare valid types (`i32`, `i64`, `bool`, `string`, etc.) and no duplicate names exist.
-- **Event Binding Safety:** Ensures event handlers (e.g. `click={count++}`) only mutate valid, declared state variables.
-
----
+- Parses `[path]/app.toml` and the configured entry component.
+- Validates mode compatibility (`python`, `rust`, `hybrid`), `<state>` types and uniqueness, `bind:*` targets, `{#each}` collections, and identifiers inside event/`{#if}` expressions.
 
 ### `zvelte build [path]`
-Generates production-ready, fine-grained reactive HTML and JavaScript assets.
-
-#### Usage
-```bash
-zvelte build
-```
-
-#### Output
-- `dist/index.html`: Fully structured HTML shell with scoped CSS injected into `<style>`.
-- `dist/app.js`: Fine-grained reactive JavaScript bundle with zero virtual DOM overhead.
-
----
+Writes production artifacts to `[build] output` (default `dist/`):
+- `index.html`: HTML5 shell with injected `<style>` CSS (no dev reload script).
+- `app.js`: Scoped fine-grained DOM runtime and `POST /api/rpc` client proxies.
+- `worker.py`: Standalone CPython stdio JSON-RPC worker (emitted when Python server or native Rust scripts exist).
+- `libnative.so` / `libnative.dylib` / `native.dll`: Compiled shared library (emitted only when `<script lang="rust">` is used in `hybrid`/`rust` mode).
 
 ### `zvelte dev [path]`
-Compiles the application into `.zvelte/dev/` and launches the embedded HTTP dev server.
-
-#### Usage
-```bash
-zvelte dev
-```
-
-#### Behavior
-- Binds to the IP address and port defined in `app.toml` (default: `http://127.0.0.1:3000/`).
-- Serves `index.html` and `app.js` with correct MIME types (`text/html; charset=utf-8` and `application/javascript; charset=utf-8`).
-- Watches `app.toml` and `app.zvelte` for real-time recompilation.
-
----
+- Compiles the project into `.zvelte/dev/`.
+- Launches supervised CPython worker (`[python] executable`, fallback `python3` / `python`) if `worker.py` is generated.
+- Binds `host:port` (automatically probing `port..port+9` if busy).
+- Watches `app.toml` and the entry `.zvelte` file when `hot_reload = true`, recompiling `.zvelte/dev/`, restarting the Python worker, and triggering browser reload via `/__zvelte_version`.
 
 ### `zvelte clean [path]`
-Removes temporary build directories and caches generated by Zvelte.
-
-#### Usage
-```bash
-zvelte clean
-```
-
-#### Invariant
-- Removes only `.zvelte/` and `dist/`.
-- Never modifies or deletes user source files (`app.toml` or `app.zvelte`).
+- Deletes configured `[build] output` (`dist/`), `[build] cache` (`.zvelte/`), and `.rustby/` safely without modifying `app.toml` or `app.zvelte`.

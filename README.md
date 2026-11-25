@@ -3,26 +3,27 @@
 > **A Python Reactive Web Framework Powered by Rust.**  
 > Author full-stack, fine-grained reactive web applications using Python server logic and Svelte-like frontend syntax in a single `.zvelte` component, backed by an ultra-fast, zero-dependency Rust engine.
 
-[![Rust 1.80+](https://img.shields.io/badge/Engine-Rust-orange.svg)](https://www.rust-lang.org/)
+[![Rust 1.85+](https://img.shields.io/badge/Engine-Rust%202024-orange.svg)](https://www.rust-lang.org/)
 [![Python 3.10+](https://img.shields.io/badge/Language-Python%203.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v0.0.5](https://img.shields.io/badge/Release-v0.0.5-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.5)
+[![Release: v0.0.6](https://img.shields.io/badge/Release-v0.0.6-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.6)
 
 ---
 
 ## 🌟 Highlights
 
 - 🐍 **Developed for Python:** Write Python backend functions, AI pipelines, database queries, and data processing directly inside your component (`<script lang="python">`).
-- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond execution, sub-500 KB binary footprint, and rock-solid memory safety.
-- 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Reactive state bindings directly update affected DOM text cells and attributes, just like Svelte.
-- 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no node_modules.
-- 🛡️ **Secure by Design:** Server-side API keys, database credentials, and secret logic stay strictly inside the Python server process and are never bundled into client-side JavaScript.
+- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond compilation, sub-500 KB stripped release binaries, and memory safety.
+- 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Scoped reactive subscriptions directly update affected DOM text cells, attributes, conditionals (`{#if}`), and keyed loops (`{#each}`).
+- 🔥 **Live Hot Reload Dev Server:** Built-in HTTP server (`zvelte dev`) with automatic port fallback, `hot_reload` file watching for `app.toml` and `.zvelte`, and supervised CPython worker restarts.
+- 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no `node_modules`.
+- 🛡️ **Secure by Design:** Only safe JSON-compatible literals auto-sync to client reactive state; Python environment lookups (`os.getenv(...)`), API keys, and server secrets remain strictly inside the Python worker process.
 
 ---
 
 ## 🤖 Live Showcase: AI Chatbot in a Single Component
 
-Build high-performance, AI-native web apps with Python and Google Gemini / OpenAI inside a single `.zvelte` component—with zero npm, zero pip dependencies, and zero API key leakage:
+Build AI-native web apps with Python and Google Gemini / OpenAI inside a single `.zvelte` component — zero npm, zero pip dependencies required, and zero API key leakage:
 
 ```html
 <!-- app.zvelte -->
@@ -66,18 +67,31 @@ is_loading: bool = false
 </main>
 ```
 
-> 🛡️ **Zero API Key Leakage:** `GEMINI_API_KEY` stays strictly in the isolated CPython worker process. It is never bundled or exposed in browser JavaScript assets. Run it with `cd examples/04-ai-chatbot && zvelte dev`!
+> 🛡️ **Zero API Key Leakage:** Server expressions like `GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")` are executed exclusively inside the isolated CPython `worker.py` process and never emitted into browser `app.js`. Run it with `cd examples/04-ai-chatbot && zvelte dev`!
+
+---
+
+## 📚 Documentation & Guides
+
+- 🏗️ **[Architecture & Internal Design](docs/ARCHITECTURE.md):** Rust compiler pipeline, scoped reactivity, and Python IPC runtime.
+- 🚀 **[Getting Started Guide](docs/GETTING_STARTED.md):** Installing Rust + Python, scaffolding, dev server, and production builds.
+- 🪟 **[Windows Setup Guide](docs/WINDOWS_SETUP.md):** Step-by-step PowerShell setup and CRLF/Winsock compatibility.
+- 📄 **[Component Format Reference](docs/COMPONENT_FORMAT.md):** `.zvelte` scripts, comments, `<state>`, `{#if}`, `{#each}`, `bind:value`, and styles.
+- ⚙️ **[Configuration Reference](docs/CONFIGURATION.md):** Complete `app.toml` reference.
+- 🛠️ **[CLI Reference Manual](docs/CLI_REFERENCE.md):** `new`, `check`, `build`, `dev`, and `clean`.
+- ⚡ **[Benchmarks](docs/BENCHMARKS.md)** & **[Zig vs Rust Comparison](comparison.md):** Measured timings and binary sizes.
+- 🗺️ **[Roadmap](ROADMAP.md)** & **[Changelog](CHANGELOG.md):** Milestones and release notes.
 
 ---
 
 ## 💡 Code Examples
 
-Browse working example applications in the [`examples/`](examples/) directory:
+Browse working example applications in [`examples/`](examples/):
 
 - ⚡ **[01-counter](examples/01-counter/):** Pure reactive client counter with increment, decrement, and reset.
-- 📝 **[02-todo-app](examples/02-todo-app/):** Task manager illustrating multiple state variables, two-way bindings, and loops.
-- 🐍 **[03-python-api](examples/03-python-api/):** Python server integration for calculations, platform info, and data formatting.
-- 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini & OpenAI GPT-4o with server-side API keys and zero pip dependencies.
+- 📝 **[02-todo-app](examples/02-todo-app/):** Task manager with `{#each}` lists, `{#if}` banners, and `bind:value` form bindings.
+- 🐍 **[03-python-api](examples/03-python-api/):** Python server functions (`datetime`, `math`, `platform`) invoked over JSON-RPC.
+- 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini & OpenAI GPT-4o with zero pip dependencies.
 
 ---
 
@@ -107,7 +121,7 @@ zvelte --version
 zvelte new my-app
 cd my-app
 
-# 2. Start the local development server
+# 2. Start the local development server (with automatic port fallback & hot reload)
 zvelte dev
 # Open http://127.0.0.1:3000/
 
@@ -120,9 +134,10 @@ zvelte build
 
 ## 📐 Component Anatomy (`app.zvelte`)
 
-Declare Python server functions and client reactive state inside `<script>`, and bind them directly in your markup with Svelte-style ergonomics:
+Declare Python server functions and client reactive state inside `<script>`, and bind them directly in your markup:
 
 ```html
+<!-- app.zvelte -->
 <script lang="python">
 name = "Babar"
 count = 0
@@ -162,35 +177,6 @@ main {
     background: #ffffff;
     border-radius: 12px;
 }
-h1 {
-    color: #1e293b;
-    margin-bottom: 0.5rem;
-}
-p {
-    color: #64748b;
-    margin-bottom: 1.5rem;
-}
-.card {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-}
-button {
-    background: #0284c7;
-    color: white;
-    border: none;
-    padding: 0.625rem 1.25rem;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    margin: 0 0.25rem;
-    transition: background 0.15s;
-}
-button:hover {
-    background: #0369a1;
-}
 </style>
 ```
 
@@ -205,17 +191,17 @@ flowchart TD
         SFC["app.zvelte"]
     end
 
-    subgraph Compiler["Zvelte Compiler Engine (Rust Core)"]
-        CFG["Config Parser (toml_parser.rs)"]
-        PARSER["Multi-Lang SFC Parser (parser.rs)"]
-        SEM["Semantic Symbol Analyzer (analyzer.rs)"]
-        PYGEN["Python RPC Supervisor Gen (codegen.rs)"]
-        JSGEN["Fine-Grained DOM & Async Proxy Codegen (js_codegen.rs)"]
+    subgraph Compiler["Zvelte Compiler Engine (Rust Std-Only Core)"]
+        CFG["TOML Parser (toml_parser.rs)"]
+        PARSER["SFC Parser (parser.rs)"]
+        SEM["Semantic Analyzer (analyzer.rs)"]
+        PYGEN["Python Worker Gen (codegen.rs)"]
+        JSGEN["Scoped Fine-Grained DOM Codegen (js_codegen.rs)"]
     end
 
     subgraph Runtime["Execution Backends"]
-        PYWORKER["worker.py (CPython Supervisor)"]
-        CLIENT["Browser Client (Fine-Grained DOM + RPC Bridge)"]
+        PYWORKER["worker.py (CPython JSON-RPC Supervisor)"]
+        CLIENT["Browser Client (Scoped Reactive DOM + RPC Bridge)"]
     end
 
     TOML --> CFG
@@ -226,14 +212,14 @@ flowchart TD
 
     PYGEN --> PYWORKER
     JSGEN --> CLIENT
-    CLIENT == JSON-RPC (HTTP /api/rpc) ==> PYWORKER
+    CLIENT == JSON-RPC (HTTP POST /api/rpc) ==> PYWORKER
 ```
 
 ---
 
 ## 🧪 Testing
 
-Run the full suite of unit and integration tests:
+Run the full unit and integration test suite:
 
 ```bash
 cargo test

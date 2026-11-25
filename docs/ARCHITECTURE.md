@@ -1,198 +1,91 @@
 # 🏗️ Zvelte Architecture & Internal Design
 
-> A comprehensive deep-dive into the compiler internals, component pipeline, reactivity model, and multi-language execution runtime of the Zvelte framework.
+> A deep dive into the Zvelte Rust compiler pipeline, fine-grained reactive DOM runtime, live hot reload dev server, and Python JSON-RPC execution model.
 
 ---
 
 ## 🧭 System Overview
 
-Zvelte is structured as a unified pipeline implemented in **Zig 0.17.1**, designed around three core principles:
-1. **Deterministic Simplicity:** Scaffolds strictly two user-facing files (`app.toml` and `app.zvelte`).
-2. **Fine-Grained DOM Updates:** Eliminates Virtual DOM reconciliation; reactive state mutations directly target and mutate affected DOM text cells and attributes.
-3. **Multi-Language Hybrid Execution:** Coordinates Python server-side logic, Zig native compute routines, and browser JavaScript/WASM execution within one component syntax.
+Zvelte is implemented in pure, zero-dependency **Rust (`edition = "2024"`, `std` only)** and designed around three principles:
+1. **Python-First Developer Experience:** Write Python server logic (`<script lang="python">`) and Svelte-style reactive markup in one `.zvelte` file without needing npm, Node.js, or knowing Rust.
+2. **Deterministic Two-File Scaffold:** `zvelte new` generates strictly `app.toml` and `app.zvelte`.
+3. **Fine-Grained Scoped DOM Reactivity:** Eliminates Virtual DOM reconciliation; state changes surgically update bound text cells, attributes, conditionals, and loops with hierarchical subscriber cleanup.
 
 ```mermaid
 flowchart TD
     subgraph Inputs["📄 Developer Source Files"]
-        TOML["app.toml (Project Configuration)"]
+        TOML["app.toml (Configuration)"]
         SFC["app.zvelte (Single-File Component)"]
     end
 
-    subgraph CLI["⚡ Zvelte Core CLI (Zig 0.17.1)"]
-        CFG["TOML Config Parser & Validator"]
-        LEX["SFC Lexer & Tokenizer"]
-        PAR["Language-Neutral AST Parser"]
-        SEM["Semantic Analyzer & Symbol Table"]
+    subgraph Core["🦀 Zvelte Compiler Engine (Rust std-only)"]
+        CFG["TOML Parser (toml_parser.rs)"]
+        PAR["SFC Parser (parser.rs)"]
+        SEM["Semantic Analyzer (analyzer.rs)"]
+        JSGEN["Scoped DOM & RPC Codegen (js_codegen.rs)"]
+        PYGEN["Python Worker Gen (codegen.rs)"]
+        NAT["Optional Rust C-ABI Compiler (native_compiler.rs)"]
     end
 
-    subgraph Adapters["🔌 Multi-Language Adapters"]
-        PY_SRV["Python Server Adapter (CPython 3.14/3.15)"]
-        ZIG_NAT["Zig Native Adapter (Host C ABI Shared Library)"]
-        ZIG_WASM["Zig WebAssembly Adapter (wasm32-freestanding)"]
+    subgraph Runtime["🚀 Runtime & Dev Server"]
+        DEV["HTTP DevServer + Hot Reload Watcher (server.rs)"]
+        PY["CPython Worker Supervisor (worker.py)"]
+        DOM["Browser Fine-Grained DOM"]
     end
 
-    subgraph Generators["⚙️ Code Generation"]
-        JS_GEN["Fine-Grained Reactive JS Codegen"]
-        HTML_GEN["HTML Shell & Injected CSS Generator"]
-    end
-
-    subgraph Outputs["🚀 Runtime & Delivery Targets"]
-        DEV["Embedded HTTP Dev Server (127.0.0.1:3000)"]
-        DIST["dist/ Production Bundle (HTML + JS + WASM)"]
-        DOM["Browser Live DOM"]
-    end
-
-    TOML --> CFG
-    SFC --> LEX --> PAR
-    CFG --> SEM
-    PAR --> SEM
-
-    SEM --> PY_SRV
-    SEM --> ZIG_NAT
-    SEM --> ZIG_WASM
-    SEM --> JS_GEN
-    SEM --> HTML_GEN
-
-    JS_GEN --> DEV
-    HTML_GEN --> DEV
-    JS_GEN --> DIST
-    HTML_GEN --> DIST
-    DEV --> DOM
-    DIST --> DOM
+    TOML --> CFG --> SEM
+    SFC --> PAR --> SEM
+    SEM --> JSGEN
+    SEM --> PYGEN
+    SEM --> NAT
+    NAT -. ctypes .-> PY
+    JSGEN --> DEV --> DOM
+    PYGEN --> PY
+    DEV == "POST /api/rpc (stdio JSON-RPC)" ==> PY
 ```
 
 ---
 
-## 🧩 1. The Single-File Component (`.zvelte`) Pipeline
+## 🧩 1. Single-File Component (`.zvelte`) Pipeline
 
-A `.zvelte` file consolidates server logic, native acceleration, client reactive state, markup, and styles without syntax ambiguity.
+The parser in [`src/source/parser.rs`](../src/source/parser.rs) splits the component into structured AST regions:
 
-### Grammar Segmentation
-The parser treats the file as distinct raw language regions:
-
-| Region | Syntax Boundary | Parser Action | Destination |
+| Region | Syntax | Parser Behavior | Output Target |
 |---|---|---|---|
-| Python Server Code | `<script lang="python" context="server">` | Raw extraction up to `</script>` | Python Server Supervisor / Bridge |
-| Zig Native Code | `<script lang="zig" context="native">` | Raw extraction up to `</script>` | C-ABI Native Shared Library |
-| Zig WASM Code | `<script lang="zig" context="wasm">` | Raw extraction up to `</script>` | `wasm32-freestanding` Compiler |
-| Reactive State | `<state>` | Line-by-line typed state parser | Reactive State Store & Dependency Graph |
-| Component Template | Markup elements & text | Recursive element AST parser | Direct DOM Generation Code |
-| Dynamic Expressions | `{expression}` | Expression tokenizer | Text/attribute subscription bindings |
-| Event Handlers | `event={expression}` | Event attribute binding parser | DOM event listener generation |
-| Styles | `<style>` | Raw CSS block extraction | Injected `<style>` head element |
+| Python Server Script | `<script lang="python">` / `context="server"` | Raw Python extraction up to `</script>`; safe JSON/JS literals extracted to reactive `state` | `worker.py` + RPC client stubs |
+| Client JS Script | `<script>` / `lang="js"` | Raw JavaScript extraction; top-level literal vars extracted to reactive `state` | Inlined inside `app.js` |
+| Optional Native Rust | `<script lang="rust">` | Raw Rust extraction (`extern "C" fn`) in `hybrid`/`rust` mode | `libnative.so` / `native.dll` + `ctypes` |
+| Explicit State | `<state>` | Typed declarations (`count: i32 = 0`) | `const state = { ... }` |
+| Template & Directives | Markup, `{expr}`, `click={...}`, `bind:value`, `{#if}`, `{#each}` | Recursive element/block AST + quote-aware `{}` scanner + `<!-- -->` comment skipping | Fine-grained DOM instructions |
+| Styles | `<style>` | Raw CSS extraction | `<style>` inside `index.html` |
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Dev as Developer / File Change
-    participant Lex as Lexer / Parser
-    participant AST as Component AST
-    participant Sem as Semantic Analyzer
-    participant Gen as JS Codegen
-    participant Out as Output File System
-
-    Dev->>Lex: Parse app.zvelte
-    Lex->>AST: Isolate raw script blocks & parse template
-    AST->>Sem: Submit Component AST + app.toml Config
-    Note over Sem: Verify mode constraints<br/>Check state variable symbols<br/>Validate event handlers
-    Sem->>Gen: Emit verified semantic model
-    Gen->>Out: Generate index.html & fine-grained app.js
-```
+### Server Secret Isolation
+`extract_script_state_variables` strictly filters top-level assignments through `normalize_safe_literal`:
+- Safe literals (`"Babar"`, `0`, `true`, `null`, `["a", "b"]`) become reactive UI `state`.
+- Non-literal server expressions (`GEMINI_KEY = os.getenv(...)`, database connections, class instances) are **never** emitted into client `app.js`, keeping secrets inside CPython `worker.py`.
 
 ---
 
-## ⚡ 2. Fine-Grained Reactive DOM Model
+## ⚡ 2. Scoped Fine-Grained Reactive DOM Model
 
-Traditional frontend frameworks evaluate a Virtual DOM tree on every state update, performing structural reconciliation ($O(N)$ diffing). 
-
-Zvelte implements **Fine-Grained Surgical Updates**:
-1. During compile-time, each dynamic interpolation `{count}` is registered with its specific parent DOM node.
-2. The compiler generates an atomic subscriber callback:
-   ```javascript
-   const txt_dyn_5 = document.createTextNode(state.count);
-   subscribe(() => { txt_dyn_5.data = state.count; });
-   ```
-3. When an event fires (e.g., `click={count++}`):
-   - The state cell is mutated: `state.count++`.
-   - The scheduler flushes subscribers: `update()`.
-   - Only `txt_dyn_5.data` is updated.
-   - **No other DOM nodes, buttons, or parent elements are touched.**
-
-```mermaid
-flowchart LR
-    subgraph EventTrigger["1. Event Trigger"]
-        BTN["User clicks <button>"]
-        HANDLER["addEventListener('click', () => { state.count++; update(); })"]
-    end
-
-    subgraph StateUpdate["2. State Mutation"]
-        CELL["state.count = state.count + 1"]
-        SCHED["update() scheduler flush"]
-    end
-
-    subgraph DirectMutation["3. Fine-Grained DOM Mutation"]
-        SUB["Subscriber callback invoked"]
-        NODE["txt_dyn_5.data = state.count"]
-        BROWSER["Screen renders updated number"]
-    end
-
-    BTN --> HANDLER
-    HANDLER --> CELL --> SCHED
-    SCHED --> SUB --> NODE --> BROWSER
-```
+Instead of Virtual DOM diffing:
+1. Dynamic text cells `{expr}` register a subscriber closure tied to their parent scope (`__curr_scope`).
+2. Dynamic control blocks (`{#if}`, `{#each}`) create child scope prefixes (`root/if_...`, `root/each_...`).
+3. Before re-rendering a block, `__clear_scope(scopeId)` removes all stale child subscribers recursively (including nested blocks), then renders fresh DOM nodes under that scope.
+4. `update()` iterates over a `subscribers.slice()` snapshot, avoiding re-render leaks or infinite subscriber growth loops.
 
 ---
 
-## 🔌 3. Multi-Language Execution Model
+## 🔌 3. Dev Server, Hot Reload & Python IPC
 
-Zvelte provides dedicated roles for each language:
-
-```mermaid
-graph TD
-    subgraph ServerSide["🖥️ Server-Side Runtime"]
-        CPY["CPython Worker Process"]
-        ZIG_LIB["Native Zig Shared Library (.so/.dll)"]
-        CTYPES["ctypes / C ABI Bridge"]
-        CPY <--> CTYPES <--> ZIG_LIB
-    end
-
-    subgraph ClientSide["🌐 Browser Client Runtime"]
-        JS_RT["Zvelte JS Runtime (State + Event Scheduler)"]
-        WASM_MOD["Zig WASM Module (.wasm)"]
-        DOM_API["Browser DOM"]
-        JS_RT <--> WASM_MOD
-        JS_RT --> DOM_API
-    end
-
-    ServerSide -.->|"JSON / HTTP API / RPC"| ClientSide
-```
-
-### Script Execution Roles
-
-- **Python (`context="server"`):**
-  - Runs inside CPython on the host.
-  - Used for database integrations, machine learning, external APIs, and server logic.
-  - Never shipped raw to the browser.
-- **Zig (`context="native"`):**
-  - Compiled into high-performance host machine code.
-  - Directly callable from Python via C ABI bindings.
-- **Zig (`context="wasm"`):**
-  - Compiled targeting `wasm32-freestanding`.
-  - Loaded by the browser JavaScript runtime for heavy numerical computation or cryptographics.
+Implemented in [`src/devserver/server.rs`](../src/devserver/server.rs):
+- **Port Fallback:** Probes `port..port+9` cleanly using standard cross-platform `std::net::TcpListener`.
+- **CPython Supervisor:** Spawns `python3 -u .zvelte/dev/worker.py` (falling back to configured `[python] executable` or `python`) communicating over unbuffered `stdin`/`stdout` JSON-RPC (`POST /api/rpc`).
+- **Live Hot Reload:** When `hot_reload = true`, monitors file mtimes of `app.toml` and the entry `.zvelte` file, rebuilds `.zvelte/dev/`, restarts `worker.py`, increments `/__zvelte_version`, and injects a lightweight reload poller into dev responses (leaving `dist/index.html` clean).
 
 ---
 
-## 📁 4. The Two-File Invariant
+## 📁 4. Current Scope Boundaries
 
-A central guarantee of Zvelte is the **Two-File Project Scaffold**:
-
-```text
-my-app/
-├── app.toml      # The single, authoritative configuration file
-└── app.zvelte    # The single, authoritative source file
-```
-
-When building or developing:
-- `.zvelte/` holds disposable development artifacts and temporary cache.
-- `dist/` holds production HTML and JavaScript.
-- Running `zvelte clean` instantly removes `.zvelte/` and `dist/`, restoring the workspace to its exact two-file state without touching user code.
+- **WebAssembly Backend (`renderer = "wasm"` / `context="wasm"`):** Present in config/AST enums for future compatibility (`ROADMAP.md` v0.1.0), not yet wired to a `wasm32` emitter. Always use `renderer = "js"` (the default) for active builds.
+- **Standalone Client `<script>` Functions:** Reactive rewrites apply to template interpolations, bindings, and inline event handlers; mutating a variable inside a separate `<script>` helper function does not yet trigger `state` updates automatically.

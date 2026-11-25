@@ -7,91 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.4] - 2026-11-23
+## [0.0.6] - 2026-11-25
 
-### ⚡ Zig Native C-ABI Shared Library Compilation & Python `ctypes` Linker (Phase 9)
+### 🛡️ Security Hardening, Live Hot Reload, Parser Fixes & Comprehensive Test Suite
 
-#### ✨ Core Features
-- **Native Zig C-ABI Compilation:** Automatically compiles `<script lang="zig" context="native">` blocks into machine-code shared libraries (`libnative.so` on Linux, `libnative.dylib` on macOS, `native.dll` on Windows) via `zig build-lib -dynamic -O ReleaseFast`.
-- **C-ABI Function Symbol Extractor:** Static parser extracting exported C-ABI functions (`export fn ... callconv(.c)`), their parameter types, and return types.
-- **Automated Python `ctypes` Wrapper Generator:** Generates type-safe ctypes bindings in `worker.py` mapping Zig types (`i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `void`) to C types (`c_int32`, `c_int64`, etc.), with automated argument coercion (`int(a)`, `float(a)`) and robust fallbacks.
-- **Seamless Python Server Interop:** Injects compiled native functions directly into Python server `globals()`. Python server functions can invoke bare-metal native Zig routines with near-zero latency.
-- **Client-Side Asynchronous RPC Access:** Generates client-side `async function <fn_name>(...args)` JavaScript proxies for native Zig exports, enabling direct browser-to-native execution via the JSON-RPC gateway.
-- **Production & Dev Build Pipelines:** Emits `dist/libnative.so` and `dist/native.zig` alongside `dist/worker.py`, `dist/app.js`, and `dist/index.html`.
-- **Recursive Clean Pipeline:** Upgraded `zvelte clean` to recursively delete `dist/` and `.zvelte/` directory trees using `dir.deleteTree`, safely preserving all user code while purging binary artifacts and caches.
-- **Enhanced Hybrid Example:** Updated `examples/03-hybrid-python-zig` showcasing native Zig multiplication (`zvelte_multiply`), ultra-fast Fibonacci computation (`zvelte_fast_fib`), and Python ctypes benchmarks.
+#### 🐛 Bug Fixes
+- **Eliminated Server Expression Leakage & Browser Crash in `04-ai-chatbot`:** Fixed `extract_script_state_variables` in [parser.rs](src/source/parser.rs) so only safe JSON/JS-compatible literal values (numbers, booleans, `null`/`None`, quoted strings, literal arrays/dicts) are auto-extracted into client `state`. Non-literal server expressions such as `GEMINI_KEY = os.getenv(...)` stay strictly on the Python server and no longer leak or throw `ReferenceError` in `app.js`.
+- **HTML Comment Support:** Added `skip_html_comment` across root, element, `{#if}`, and `{#each}` parsing loops so `<!-- ... -->` comments parse cleanly without `MismatchedTag` or `UnexpectedEOF`.
+- **String Literal Preservation & Escaping in JS Codegen:**
+  - Updated `JsCodegen::format_expr` to skip quoted string literals (`"..."`, `'...'`, `` `...` ``) verbatim instead of rewriting identifiers inside strings as `state.<ident>`.
+  - Added full `\r` (`\r\n` CRLF) and attribute escaping in generated JS strings and HTML `<title>`, preventing Windows line-ending syntax errors.
+  - Quoted brace-expression scanner (`read_braced_expression`) now ignores braces inside strings (e.g., `click={msg = "a } b"}`).
+- **TOML Quoted `#` Handling:** Updated [toml_parser.rs](src/config/toml_parser.rs) so `#` characters inside single- or double-quoted TOML values are preserved rather than stripped as comments, and added `[build] out_dir` alias support.
+- **Scoped `{#if}` / `{#each}` Subscriber Cleanup:** Replaced unbounded subscriber growth with hierarchical scoped tracking (`subscribe`, `__clear_scope`) and snapshot iteration in `update()`, preventing stale DOM callbacks on re-render.
+
+#### ✨ Implemented Claims & Improvements
+- **Live Hot Reload File Watcher (`zvelte dev`):** [server.rs](src/devserver/server.rs) now monitors `app.toml` and the entry `.zvelte` file for modification changes when `hot_reload = true`, recompiling `.zvelte/dev`, restarting the supervised Python worker, exposing `GET /__zvelte_version`, and auto-refreshing connected browsers.
+- **Wired `[build] output` & `[python] executable`:** `zvelte build` and `zvelte clean` respect `[build] output` and `[build] cache`, and `DevServer` respects `[python] executable`.
+- **HTTP Request Hardening:** Added loop-until-headers-complete reading, case-insensitive `Content-Length` parsing, and blocking client stream reset in `DevServer`.
+- **Documentation Sync:** Updated `README.md`, `ROADMAP.md`, all `docs/*.md` files, and `examples/01..03` to match the Rust + Python v0.0.6 architecture.
 
 #### 🧪 Test Suite
-- **Native Parser & Ctypes Generator Tests:** Validates extraction of exported functions, parameter parsing, and ctypes Python code generation.
-- **End-to-End Native Compilation Test:** Compiles Zig native code into shared library and verifies binary creation.
-- **Direct Python `ctypes` Test:** Loads `libnative.so` into CPython, executes `zvelte_multiply` and `zvelte_fast_fib(40)` in sub-microseconds, verifying return values and type coercions.
-- **End-to-End Dev Server RPC Test:** Executes live dev server on port 3003, querying both direct native Zig RPC endpoints and Python ctypes wrapper endpoints over HTTP.
+- Added comprehensive integration & unit tests in [tests/comprehensive_tests.rs](tests/comprehensive_tests.rs) plus library unit tests in [src/lib.rs](src/lib.rs), covering TOML, parser, semantic checks, JS/Python codegen, CRLF, string preservation, native C-ABI, scaffold contract, CLI workflow, live DevServer HTTP + Python RPC, and live Hot Reload.
+
+---
+
+## [0.0.5] - 2026-11-23
+
+### 🦀 Migration to Zero-Dependency Rust Core Engine & Python-First Developer Experience
+
+#### ✨ Core Features
+- **Full Rust Rewrite (`std`-only):** Replaced the Zig compiler implementation with a pure Rust (`edition = "2024"`) compiler, parser, semantic analyzer, JS/Python code generator, and cross-platform HTTP dev server compiled cleanly under ~500 KB (`opt-level = "z"`, LTO, stripped).
+- **Python-First Scaffolding:** `zvelte new <app>` defaults to `mode = "python"` generating pure Python server logic + Svelte reactive markup, while still supporting optional native Rust C-ABI acceleration (`<script lang="rust">`) in `hybrid`/`rust` modes.
+- **Dual Binary Targets:** Emits both `zvelte` and `zvelte-rs`.
+- **Benchmark Suite Comparison:** Recorded Zig vs. Rust empirical metrics in [comparison.md](comparison.md).
+
+---
+
+## [0.0.4] - 2026-11-23
+
+### ⚡ Native C-ABI Shared Library Compilation & Python `ctypes` Linker (Phase 9)
+- Added native C-ABI compilation (`libnative.so` / `libnative.dylib` / `native.dll`), automated `ctypes` bindings in `worker.py`, Svelte-style optional script attributes, automatic top-level state inference, clean SIGINT handling, cross-platform sockets, and automatic dev port fallback.
 
 ## [0.0.3] - 2026-11-22
 
 ### ⚡ Python Server Worker Process Integration & JSON-RPC Bridge (Phase 10)
-
-#### ✨ Core Features
-- **Embedded CPython Worker Supervisor:** The Zig dev server automatically detects `<script lang="python" context="server">` blocks, generates an isolated `.zvelte/dev/worker.py` runner using standard library only (`sys`, `json`, `traceback`), and manages a live `python3 -u` child process with pipe I/O.
-- **Line-Buffered JSON-RPC IPC Bridge:** Implemented high-performance IPC over standard I/O streams (`stdin`/`stdout`). Eliminates TCP port collision and achieves sub-millisecond local request latency.
-- **HTTP RPC API Gateway (`POST /api/rpc`):** The embedded Zig HTTP server dispatches RPC calls to the Python worker's stdin, reads line-buffered JSON responses, and returns HTTP 200 JSON payloads with CORS preflight support.
-- **Client Asynchronous RPC Proxies:** JavaScript code generator automatically detects all declared top-level Python functions (`def ...` and `async def ...`) and emits `async function <fn_name>(...args)` wrappers, calling `POST /api/rpc` and returning Promises.
-- **Promise-Aware Reactive DOM Resolution:** Generated runtime includes `__setNodeText(node, val)` supporting Promise-based dynamic interpolations (e.g., `{get_server_status()}`) and event handlers without manual `await` boilerplate.
-- **Semantic Analyzer Function Resolution:** Enhanced symbol analyzer to extract functions declared in `<script>` blocks and permit their invocation in event handlers (`click={ask_ai(user_prompt)...}`).
-- **Graceful Process Management:** Automatic child process shutdown with SIGTERM termination and pipe deinitialization on server exit.
-- **Production Worker Output:** `zvelte build` emits standalone `dist/worker.py` alongside `dist/index.html` and `dist/app.js` with asset size tracking.
-
-#### 🧪 Test Suite
-- **Worker Code Generation Test:** Verifies generation of Python RPC handler with user logic and error handling.
-- **End-to-End RPC Execution Test:** Spawns live Python process over pipes, sends JSON-RPC request for `greeting()`, and verifies JSON response format.
-- **Semantic Analysis Server Function Test:** Validates that declared Python server functions pass event handler semantic checks and unknown functions are cleanly rejected.
-
----
+- Added embedded CPython worker supervisor (`worker.py`), line-buffered stdio JSON-RPC bridge, `POST /api/rpc`, client async proxies, and Promise-aware DOM text binding.
 
 ## [0.0.2] - 2026-11-22
 
 ### ⚡ Template Language Essentials & Advanced Reactivity (Phase 8)
-
-#### ✨ Core Features
-- **Conditional Rendering Blocks (`{#if}` / `{:else}` / `{/if}`):** Supports conditional template rendering with `display: contents` wrapper containers and fine-grained subscriber recreation without Virtual DOM diffing.
-- **Keyed List Rendering Blocks (`{#each items as item}` / `{#each items as item (key)}`):** Dynamic loop iteration over reactive array collections in state, generating individual element templates with lexical scope preservation.
-- **Two-Way Form Input Bindings (`bind:value` / `bind:checked`):** Direct two-way synchronization on `<input>` elements with cursor stabilization checks (`el.value !== state.x`) preventing input jumping.
-- **Advanced Expression Parser:** Automatic lexical scoping for complex expressions, mathematical operations, array mutations (`todos.push(...)`), and ternary conditions, cleanly mapping state variables to reactive state properties.
-- **Extended State Types:** Added support for array/slice types (`[]string`, `[]i32`, `list`, `array`) in `<state>` blocks.
-- **Enhanced Example Application:** Updated `examples/02-todo-app` into a fully interactive task manager demonstrating dynamic list rendering, conditional completion banners, and two-way form input bindings.
-
-#### 🧪 Test Suite
-- New unit and semantic tests for template language essentials:
-  - Conditional if/else block parsing and AST validation.
-  - Keyed and unkeyed each block parsing and syntax error rejection.
-  - Two-way input binding parsing and unknown binding state variable rejection.
-  - Code generation verification for dynamic if/else wrappers, each loop iterators, and input event bindings.
-
----
+- Added conditional blocks (`{#if}`/`{:else}`), list blocks (`{#each}`), and two-way form bindings (`bind:value`, `bind:checked`).
 
 ## [0.0.1] - 2026-11-21
 
 ### 🚀 Initial Framework Release
-
-#### ✨ Core Features
-- **Deterministic Two-File Scaffolding:** `zvelte new <app>` creates strictly `app.toml` and `app.zvelte`. Verified with zero extraneous files.
-- **Unified Single-File Component (`.zvelte`) Parser:** Parses multi-language script blocks (`python` server, `zig` native, `zig` wasm), typed `<state>` declarations, markup element trees, event handlers (`click={...}`), dynamic expressions (`{...}`), and scoped `<style>`.
-- **Zero-Dependency TOML Parser:** Pure Zig parser supporting section tables, string literals with escape sequences, booleans, integers, floats, and comments.
-- **Typed Configuration Model (`AppConfig`):** Validates project mode (`python`, `zig`, `hybrid`), execution targets, port constraints, and toolchain versions.
-- **Semantic Analyzer:** Symbol verification preventing duplicate state names, verifying event expression mutation targets, and enforcing project language mode constraints.
-- **Fine-Grained Reactive JavaScript Generator:** Direct DOM manipulation generator with subscriber callbacks targeting specific text nodes without Virtual DOM reconciliation overhead.
-- **Embedded Development Server:** High-performance native HTTP server in Zig listening on `127.0.0.1:3000` with correct MIME types for HTML and JavaScript.
-- **Production Build Pipeline:** `zvelte build` emits clean, standalone `dist/index.html` and `dist/app.js`.
-- **Clean Command:** `zvelte clean` safely deletes generated cache (`.zvelte/`) and build outputs (`dist/`) while strictly preserving user source files.
-
-#### 🧪 Test Suite
-- Comprehensive test coverage across all subsystems:
-  - TOML parser conformance.
-  - Configuration loader and validation.
-  - Two-file scaffold creation and overwrite protection.
-  - Strict two-file invariant iteration test.
-  - Static HTML parser.
-  - Multi-language hybrid counter component parser.
-  - Semantic analysis and mode rejection.
-  - Static and fine-grained reactive JavaScript codegen.
-  - Embedded dev server socket binding.
+- Deterministic two-file scaffolding (`app.toml` + `app.zvelte`), `.zvelte` parser, TOML parser, semantic analyzer, fine-grained JS codegen, dev server, and `check`/`build`/`clean` CLI.

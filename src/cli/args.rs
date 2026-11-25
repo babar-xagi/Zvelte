@@ -6,7 +6,7 @@ use crate::semantic::analyzer::analyze;
 use crate::compiler::codegen::build_project;
 use crate::devserver::server::DevServer;
 
-pub const VERSION: &str = "0.0.5";
+pub const VERSION: &str = "0.0.6";
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {
@@ -75,8 +75,20 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let target_path = if args.len() >= 3 { &args[2] } else { "." };
             let proj_dir = Path::new(target_path);
 
+            let toml_path = proj_dir.join("app.toml");
+            let toml_source = std::fs::read_to_string(&toml_path)
+                .map_err(|e| format!("failed to read app.toml: {}", e))?;
+            let cfg = parse_app_toml(&toml_source)
+                .map_err(|e| format!("invalid configuration in app.toml: {}", e))?;
+
+            let out_dir = if cfg.build.output.is_empty() {
+                "dist"
+            } else {
+                cfg.build.output.as_str()
+            };
+
             println!("Building project for production via Rust engine...");
-            let res = build_project(proj_dir, "dist")?;
+            let res = build_project(proj_dir, out_dir)?;
 
             println!("\x1b[32m✔\x1b[0m Production build complete in \x1b[1m{}/\x1b[0m", res.output_dir);
             println!("  ├── index.html ({} bytes)", res.html_bytes);
@@ -115,17 +127,24 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let proj_dir = Path::new(target_path);
 
             println!("Cleaning build artifacts and cache...");
-            let dist_dir = proj_dir.join("dist");
-            if dist_dir.exists() {
-                let _ = std::fs::remove_dir_all(&dist_dir);
+            let mut dist_name = "dist".to_string();
+            let mut cache_name = ".zvelte".to_string();
+            if let Ok(toml_source) = std::fs::read_to_string(proj_dir.join("app.toml")) {
+                if let Ok(cfg) = parse_app_toml(&toml_source) {
+                    if !cfg.build.output.is_empty() {
+                        dist_name = cfg.build.output;
+                    }
+                    if !cfg.build.cache.is_empty() {
+                        cache_name = cfg.build.cache;
+                    }
+                }
             }
-            let dev_dir = proj_dir.join(".zvelte");
-            if dev_dir.exists() {
-                let _ = std::fs::remove_dir_all(&dev_dir);
-            }
-            let rustby_cache = proj_dir.join(".rustby");
-            if rustby_cache.exists() {
-                let _ = std::fs::remove_dir_all(&rustby_cache);
+
+            for dir_name in [dist_name.as_str(), cache_name.as_str(), "dist", ".zvelte", ".rustby"] {
+                let p = proj_dir.join(dir_name);
+                if p.exists() {
+                    let _ = std::fs::remove_dir_all(&p);
+                }
             }
 
             println!("\x1b[32m✔\x1b[0m Clean complete. User source files preserved.");

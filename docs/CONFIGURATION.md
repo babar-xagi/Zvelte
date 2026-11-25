@@ -1,10 +1,10 @@
 # ⚙️ `app.toml` Configuration Reference
 
-> The complete specification and reference for `app.toml`, the single authoritative configuration file for Zvelte applications.
+> Complete specification for `app.toml`, the single authoritative configuration file for Zvelte projects.
 
 ---
 
-## 📄 Complete Example Configuration
+## 📄 Example Configuration (`mode = "python"`)
 
 ```toml
 [project]
@@ -14,36 +14,25 @@ entry = "app.zvelte"
 
 [app]
 target = "web"
-mode = "hybrid"              # Options: "python", "zig", "hybrid"
-renderer = "js"               # Options: "js", "wasm", "auto"
+mode = "python"              # Options: "python", "rust", "hybrid"
+renderer = "js"              # Currently active: "js" ("wasm" planned)
 strict = true
-
-[toolchain]
-zig = "0.17.1"
-python = "3.15"
 
 [python]
 enabled = true
-executable = "python3"
-execution = "server"          # CPython host execution; not browser-side
-zig_acceleration = true
-
-[zig]
-enabled = true
-executable = "zig"
-native_modules = true
-wasm_modules = true
+executable = "python3"       # Command or path for CPython supervisor
+version = "3.10+"
 
 [dev]
 host = "127.0.0.1"
 port = 3000
-hot_reload = true
+hot_reload = true            # Watches app.toml and entry component for changes
 open_browser = false
 
 [build]
-output = "dist"
+output = "dist"              # Alias: out_dir
 cache = ".zvelte"
-optimization = "debug"        # Options: "debug", "release-safe", "release-fast"
+optimization = "release"
 minify = false
 source_maps = true
 ```
@@ -53,86 +42,56 @@ source_maps = true
 ## 🔍 Section Breakdown
 
 ### 1. `[project]`
-Metadata defining the application identity and primary entrypoint.
-
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `name` | string | **Required** | Project name (used for HTML title and artifact tagging). |
-| `version` | string | `"0.1.0"` | Semantic version string of the application. |
-| `entry` | string | `"app.zvelte"` | Primary component entry file. |
-
----
+| `name` | string | `"zvelte-app"` | Application name (also sets HTML `<title>`). |
+| `version` | string | `"0.1.0"` | Semantic version string. |
+| `entry` | string | `"app.zvelte"` | Entry single-file component path. |
 
 ### 2. `[app]`
-Core runtime mode and compilation behavior.
-
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `target` | string | `"web"` | Compilation target platform. |
-| `mode` | string | `"hybrid"` | Permitted language block mode: `"python"`, `"zig"`, or `"hybrid"`. |
-| `renderer` | string | `"js"` | Client execution backend: `"js"` (default) or `"wasm"`. |
-| `strict` | bool | `true` | When `true`, unknown keys and type violations cause immediate failure. |
+| `target` | string | `"web"` | Target platform. |
+| `mode` | string | `"hybrid"` | Permitted script languages: `"python"` (Python + JS), `"rust"` (Rust + JS), or `"hybrid"` (all). |
+| `renderer` | string | `"js"` | Client renderer (`"js"` active; `"wasm"` reserved on roadmap). |
+| `strict` | bool | `true` | Strict configuration/semantic enforcement flag. |
 
-#### Language Mode Rules:
-- **`mode = "python"`:** Disallows Zig script blocks (`native` and `wasm`). Fails with `ZigBlockNotAllowedInPythonMode` if a Zig block is detected.
-- **`mode = "zig"`:** Disallows Python server script blocks. Fails with `PythonBlockNotAllowedInZigMode` if a Python block is detected.
-- **`mode = "hybrid"`:** Permits both Python and Zig blocks simultaneously.
+- **`mode = "python"`**: Rejects `<script lang="rust">` blocks (`RustBlockNotAllowedInPythonMode`).
+- **`mode = "rust"`**: Rejects `<script lang="python">` blocks (`PythonBlockNotAllowedInRustMode`).
+- **`mode = "hybrid"`**: Allows both Python and optional native Rust blocks.
 
----
+### 3. `[python]` & `[toolchain]`
+| Section / Key | Type | Default | Description |
+|---|---|---|---|
+| `[python] enabled` | bool | `true` | Enables Python configuration. |
+| `[python] executable` | string | `"python3"` | CPython binary invoked by `zvelte dev` (automatically falls back to `python3` / `python`). |
+| `[python] execution` | string | `"server"` | Always host-side CPython worker. |
+| `[python] rust_acceleration` | bool | `true` | Links optional compiled native shared libraries into Python via `ctypes`. |
+| `[toolchain] python` / `rust` | string | `"3.10+"` / `"1.80+"` | Informational version requirements. |
 
-### 3. `[toolchain]`
-Specifies compiler and language versions required by the project.
-
+### 4. `[rust]` *(Optional)*
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `zig` | string | `"0.17.1"` | Required Zig compiler version. |
-| `python` | string | `"3.15"` | Target Python version. |
+| `enabled` | bool | `true` | Enables optional native Rust module compilation. |
+| `executable` | string | `"rustc"` | Native compiler executable (`$RUSTC`, `PATH`, or `~/.cargo/bin/rustc`). |
+| `native_modules` | bool | `true` | Enables `rustc --crate-type cdylib` compilation. |
 
----
-
-### 4. `[python]`
-Configuration for the Python server supervisor and acceleration bindings.
-
+### 5. `[dev]`
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | bool | `true` | Enables or disables Python server block parsing and execution. |
-| `executable` | string | `"python3"` | Path or command name for the CPython binary. |
-| `execution` | string | `"server"` | Execution environment (always `"server"` in v0.1). |
-| `zig_acceleration` | bool | `true` | When `true`, automatically links native Zig shared library functions to Python. |
+| `host` | string | `"127.0.0.1"` | Bind IP address. |
+| `port` | integer | `3000` | Initial TCP port (`zvelte dev` automatically tries `port..port+9` if busy). |
+| `hot_reload` | bool | `true` | Watches `app.toml` and entry `.zvelte` for edits, recompiles `.zvelte/dev`, restarts Python worker, and reloads connected browsers. |
+| `open_browser` | bool | `false` | Browser auto-open option flag. |
 
----
-
-### 5. `[zig]`
-Settings for native compilation and WebAssembly module building.
-
+### 6. `[build]`
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `enabled` | bool | `true` | Enables or disables Zig compilation. |
-| `executable` | string | `"zig"` | Path or command name for the Zig executable. |
-| `native_modules` | bool | `true` | Enables host shared library compilation for server acceleration. |
-| `wasm_modules` | bool | `true` | Enables `wasm32-freestanding` compilation for browser compute modules. |
+| `output` / `out_dir` | string | `"dist"` | Directory where `zvelte build` writes production artifacts (`zvelte clean` removes this directory). |
+| `cache` | string | `".zvelte"` | Cache directory removed on `zvelte clean`. |
+| `optimization` | string | `"release"` | Build optimization label. |
+| `minify` | bool | `false` | Reserved option flag for future minification pass. |
+| `source_maps` | bool | `true` | Source map configuration flag. |
 
----
-
-### 6. `[dev]`
-Configuration for the embedded development server.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `host` | string | `"127.0.0.1"` | Bind IP address for local HTTP development. |
-| `port` | integer | `3000` | TCP port number (must be between 1 and 65535). |
-| `hot_reload` | bool | `true` | Watches `app.toml` and `app.zvelte` for live browser updates. |
-| `open_browser` | bool | `false` | Automatically opens default browser on server start. |
-
----
-
-### 7. `[build]`
-Settings for production code generation and asset bundling.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `output` | string | `"dist"` | Directory where production artifacts are placed. |
-| `cache` | string | `".zvelte"` | Directory for intermediate build artifacts and compiler cache. |
-| `optimization` | string | `"debug"` | Optimization level: `"debug"`, `"release-safe"`, or `"release-fast"`. |
-| `minify` | bool | `false` | Minifies generated JavaScript and HTML in production. |
-| `source_maps` | bool | `true` | Generates source maps for development debugging. |
+> [!NOTE]
+> `#` comments inside TOML files work at line starts and unquoted value ends while preserving literal `#` characters inside single- or double-quoted strings (e.g. `name = "Brand #1"`). Legacy `[zig]` / `zig_acceleration` keys are also accepted for backward compatibility.

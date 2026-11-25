@@ -1,90 +1,46 @@
 # ⚡ Zvelte Performance & Benchmarks
 
-> Empirical benchmark measurements of the Zvelte compiler, execution pipeline, and embedded development server.
+> Empirical benchmark measurements of the **Zvelte v0.0.6** Rust compiler engine (`opt-level = "z"`, LTO, stripped) across the repository examples.
 
 ---
 
-## 📊 Benchmark Summary (v0.0.1)
+## 📊 Benchmark Summary (v0.0.6 — Rust Core Engine)
 
-All measurements conducted on **Ubuntu Linux (WSL2, x86_64)** running **Zig 0.17.1**:
+Measured on **Linux x86_64** using **Python 3.14.4** and **`target/release/zvelte` (`516,904` bytes / `504.8 KB`)**:
 
-| Metric | Measurement | Notes |
+| Project | `zvelte check` (20-run mean) | `zvelte build` (20-run mean) | `dist/index.html` | `dist/app.js` |
+|---|---|---|---|---|
+| [`examples/01-counter`](../examples/01-counter/) | **4.12 ms** | **5.44 ms** | 1,918 B | 4,627 B |
+| [`examples/02-todo-app`](../examples/02-todo-app/) | **3.73 ms** | **5.26 ms** | 2,265 B | 9,171 B |
+| [`examples/03-python-api`](../examples/03-python-api/) | **3.32 ms** | **5.46 ms** | 1,568 B | 9,599 B |
+| [`examples/04-ai-chatbot`](../examples/04-ai-chatbot/) | **4.87 ms** | **6.86 ms** | 3,289 B | 16,739 B |
+
+> For historical Zig vs. Rust architecture benchmarks from the migration decision, see [`comparison.md`](../comparison.md).
+
+---
+
+## 🥊 Architecture Comparison: Fine-Grained Scoped DOM vs Virtual DOM
+
+| Architectural Feature | Traditional Virtual DOM | Zvelte Fine-Grained Scoped DOM |
 |---|---|---|
-| **Semantic Checking (`zvelte check`)** | **`7 ms`** | TOML loading + SFC parsing + AST validation |
-| **Production Build (`zvelte build`)** | **`6 ms`** | AST traversal + DOM JS codegen + file writes |
-| **Dev Server Response Latency** | **`0.35 ms`** | Sub-millisecond localhost HTTP request-response |
-| **Generated Runtime Bundle Size** | **`1.5 KB`** | Standalone fine-grained JS runtime + component logic |
-| **Generated HTML Shell Size** | **`376 B`** | Complete HTML document with injected CSS |
-| **Memory Allocation Overhead** | **`0 bytes leaked`** | Arena-managed allocation verified by `std.testing` |
-
----
-
-## ⏱️ Detailed Timings
-
-### 1. Semantic Check Latency (`zvelte check`)
-```text
-$ time zvelte check
-✔ Check passed: 'bench-app' (mode: hybrid, renderer: js, 1 state vars, 3 scripts)
-
-real    0m0.007s
-user    0m0.004s
-sys     0m0.004s
-```
-
-### 2. Production Build Latency (`zvelte build`)
-```text
-$ time zvelte build
-Building Zvelte project for production...
-✔ Production build complete in dist/
-  ├── index.html (376 bytes)
-  └── app.js (1545 bytes)
-
-real    0m0.006s
-user    0m0.006s
-sys     0m0.000s
-```
-
-### 3. Localhost HTTP Dev Server Request Latency
-Measured across 5 consecutive requests to `http://127.0.0.1:3000/`:
-```text
-Request 1: 0.000578s (0.57 ms)
-Request 2: 0.000351s (0.35 ms)
-Request 3: 0.000364s (0.36 ms)
-Request 4: 0.000305s (0.30 ms)
-Request 5: 0.000369s (0.36 ms)
-Average:   0.000393s (~0.39 ms)
-```
-
----
-
-## 🥊 Architecture Comparison: Fine-Grained vs Virtual DOM
-
-| Architectural Feature | Traditional Virtual DOM | Zvelte Fine-Grained DOM |
-|---|---|---|
-| **Update Mechanism** | Traverses & reconciles VDOM tree ($O(N)$) | Directly updates specific DOM text cell ($O(1)$) |
-| **Runtime Overhead** | 30KB – 150KB runtime library | ~1.5KB generated inline runtime |
-| **Memory Footprint** | Dual VDOM representation in heap | No virtual tree in memory |
-| **Re-render Scope** | Parent component & children re-execute | Only affected subscriber functions execute |
-| **Compiler Language** | JavaScript / TypeScript / Rust | Native Zig 0.17.1 |
-| **Startup Time** | Node.js / V8 initialization lag | Instant native binary invocation (<10ms) |
+| **Update Mechanism** | Traverses & diffs VDOM tree | Directly mutates bound DOM text cells & attributes |
+| **Runtime Footprint** | Large framework runtime | Lightweight inline `app.js` with `__clear_scope` block cleanup |
+| **Memory Leak Prevention** | Garbage-collected tree diffing | Hierarchical scope disposal (`__clear_scope`) on `{#if}` / `{#each}` re-render |
+| **Server Execution** | Separate backend stack + bundler | Built-in CPython stdio JSON-RPC supervisor (`POST /api/rpc`) |
+| **Compiler Binary** | Node.js / V8 startup overhead | Standalone `504.8 KB` Rust binary (~3–7 ms CLI check/build) |
 
 ---
 
 ## 🔬 Reproducing These Benchmarks
 
-You can run these benchmarks in any cloned repository:
-
 ```bash
-# 1. Scaffolding
-zvelte new bench-app
-cd bench-app
+# Build size-optimized release binary
+cargo build --release
 
-# 2. Timing the check command
-time zvelte check
+# Inspect binary size
+ls -lh target/release/zvelte
 
-# 3. Timing the build command
-time zvelte build
-
-# 4. Checking asset sizes
-ls -lh dist/
+# Time check & build on any example
+./target/release/zvelte check examples/04-ai-chatbot
+./target/release/zvelte build examples/04-ai-chatbot
 ```
