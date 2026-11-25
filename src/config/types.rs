@@ -126,6 +126,35 @@ impl Default for TailwindConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnoCssConfig {
+    pub enabled: bool,
+    pub preflight: bool,
+    pub attributify: bool,
+    pub variant_group: bool,
+    pub dark_mode: String, // "media" or "class"
+    pub preset: String,    // "uno", "wind3", "wind4", "mini"
+    pub mode: String,      // "auto", "builtin", "cli", "off"
+    pub shortcuts: Vec<(String, String)>,
+    pub explicit: bool,
+}
+
+impl Default for UnoCssConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            preflight: true,
+            attributify: true,
+            variant_group: true,
+            dark_mode: "media".to_string(),
+            preset: "uno".to_string(),
+            mode: "auto".to_string(),
+            shortcuts: Vec::new(),
+            explicit: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub project: ProjectConfig,
     pub app: AppSection,
@@ -135,6 +164,7 @@ pub struct AppConfig {
     pub dev: DevConfig,
     pub build: BuildConfig,
     pub tailwind: TailwindConfig,
+    pub unocss: UnoCssConfig,
 }
 
 impl Default for AppConfig {
@@ -181,6 +211,7 @@ impl Default for AppConfig {
                 source_maps: true,
             },
             tailwind: TailwindConfig::default(),
+            unocss: UnoCssConfig::default(),
         }
     }
 }

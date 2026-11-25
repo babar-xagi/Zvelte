@@ -12,7 +12,7 @@ pub struct TailwindOutput {
     pub utility_count: usize,
 }
 
-const PREFLIGHT_CSS: &str = r#"@layer base {
+pub(crate) const PREFLIGHT_CSS: &str = r#"@layer base {
   *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #e5e7eb; }
   html { line-height: 1.5; -webkit-text-size-adjust: 100%; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { margin: 0; line-height: inherit; }
@@ -51,7 +51,7 @@ const PALETTE: &[(&str, &[(u16, (u8, u8, u8))])] = &[
     ("rose", &[(50,(255,241,242)),(100,(255,228,230)),(200,(254,205,211)),(300,(253,164,175)),(400,(251,113,133)),(500,(244,63,94)),(600,(225,29,72)),(700,(190,18,60)),(800,(159,18,57)),(900,(136,19,55)),(950,(76,5,25))]),
 ];
 
-fn parse_arbitrary_val(s: &str) -> Option<String> {
+pub(crate) fn parse_arbitrary_val(s: &str) -> Option<String> {
     if s.starts_with('[') && s.ends_with(']') && s.len() >= 2 {
         Some(s[1..s.len() - 1].replace('_', " "))
     } else {
@@ -59,7 +59,7 @@ fn parse_arbitrary_val(s: &str) -> Option<String> {
     }
 }
 
-fn parse_alpha(s: &str) -> Option<String> {
+pub(crate) fn parse_alpha(s: &str) -> Option<String> {
     if let Some(arb) = parse_arbitrary_val(s) {
         return Some(arb);
     }
@@ -78,7 +78,7 @@ fn parse_alpha(s: &str) -> Option<String> {
     }
 }
 
-fn resolve_color(token: &str) -> Option<String> {
+pub(crate) fn resolve_color(token: &str) -> Option<String> {
     let (base, alpha_opt) = if let Some(slash) = token.find('/') {
         (&token[..slash], Some(parse_alpha(&token[slash + 1..])?))
     } else {
@@ -141,7 +141,7 @@ fn resolve_color(token: &str) -> Option<String> {
     None
 }
 
-fn resolve_spacing(token: &str) -> Option<String> {
+pub(crate) fn resolve_spacing(token: &str) -> Option<String> {
     if let Some(arb) = parse_arbitrary_val(token) {
         return Some(arb);
     }
@@ -185,7 +185,7 @@ fn resolve_fraction(token: &str) -> Option<String> {
     }
 }
 
-fn resolve_size(token: &str) -> Option<String> {
+pub(crate) fn resolve_size(token: &str) -> Option<String> {
     if let Some(s) = resolve_spacing(token) {
         return Some(s);
     }
@@ -206,21 +206,21 @@ fn resolve_size(token: &str) -> Option<String> {
 }
 
 #[derive(Default)]
-struct ResolvedUtility {
-    decls: Vec<(String, String)>,
-    child_combinator: Option<&'static str>,
-    needs_keyframe: Option<&'static str>,
+pub(crate) struct ResolvedUtility {
+    pub(crate) decls: Vec<(String, String)>,
+    pub(crate) child_combinator: Option<&'static str>,
+    pub(crate) needs_keyframe: Option<&'static str>,
 }
 
 impl ResolvedUtility {
-    fn one(prop: &str, val: impl Into<String>) -> Self {
+    pub(crate) fn one(prop: &str, val: impl Into<String>) -> Self {
         Self {
             decls: vec![(prop.to_string(), val.into())],
             ..Default::default()
         }
     }
 
-    fn many(pairs: Vec<(&str, String)>) -> Self {
+    pub(crate) fn many(pairs: Vec<(&str, String)>) -> Self {
         Self {
             decls: pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
             ..Default::default()
@@ -228,7 +228,7 @@ impl ResolvedUtility {
     }
 }
 
-fn resolve_radius(size: &str) -> Option<&'static str> {
+pub(crate) fn resolve_radius(size: &str) -> Option<&'static str> {
     match size {
         "" => Some("0.25rem"),
         "none" => Some("0px"),
@@ -243,7 +243,7 @@ fn resolve_radius(size: &str) -> Option<&'static str> {
     }
 }
 
-fn resolve_utility(raw_utility: &str) -> Option<ResolvedUtility> {
+pub(crate) fn resolve_utility(raw_utility: &str) -> Option<ResolvedUtility> {
     // Handle universal arbitrary property: [prop:value]
     if let Some(arb) = parse_arbitrary_val(raw_utility) {
         if let Some(colon) = arb.find(':') {
@@ -923,7 +923,7 @@ fn resolve_utility(raw_utility: &str) -> Option<ResolvedUtility> {
     None
 }
 
-fn split_variants_outside_brackets(class_token: &str) -> Vec<&str> {
+pub(crate) fn split_variants_outside_brackets(class_token: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut bracket_depth = 0usize;
     let mut start = 0usize;
@@ -943,7 +943,7 @@ fn split_variants_outside_brackets(class_token: &str) -> Vec<&str> {
     parts
 }
 
-fn escape_css_ident(raw: &str) -> String {
+pub(crate) fn escape_css_ident(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len() + 4);
     for c in raw.chars() {
         match c {
@@ -958,7 +958,7 @@ fn escape_css_ident(raw: &str) -> String {
     out
 }
 
-fn breakpoint_weight_and_query(bp: &str) -> Option<(u8, &'static str)> {
+pub(crate) fn breakpoint_weight_and_query(bp: &str) -> Option<(u8, &'static str)> {
     match bp {
         "sm" => Some((1, "@media (min-width: 640px)")),
         "md" => Some((2, "@media (min-width: 768px)")),
@@ -974,36 +974,24 @@ fn breakpoint_weight_and_query(bp: &str) -> Option<(u8, &'static str)> {
     }
 }
 
-fn compile_single_utility_rule(
-    full_class: &str,
-    config: &TailwindConfig,
+pub(crate) fn build_rule_with_variants(
+    selector_base: &str,
+    variants: &[&str],
+    important: bool,
+    mut resolved: ResolvedUtility,
+    dark_mode: &str,
 ) -> Option<(u8, Vec<String>, String, Option<&'static str>)> {
-    let parts = split_variants_outside_brackets(full_class);
-    if parts.is_empty() {
-        return None;
-    }
-
-    let raw_util = *parts.last()?;
-    let (important, clean_util) = if let Some(u) = raw_util.strip_prefix('!') {
-        (true, u)
-    } else if let Some(first) = parts.first().filter(|p| p.starts_with('!') && parts.len() == 1) {
-        (true, &first[1..])
-    } else {
-        (false, raw_util)
-    };
-
-    let mut resolved = resolve_utility(clean_util)?;
     let mut media_queries: Vec<String> = Vec::new();
     let mut weight = 0u8;
     let mut prefix_sel = String::new();
     let mut suffix_pseudo = String::new();
 
-    for &variant in &parts[..parts.len() - 1] {
+    for &variant in variants {
         if let Some((w, mq)) = breakpoint_weight_and_query(variant) {
             weight = weight.max(w);
             media_queries.push(mq.to_string());
         } else if variant == "dark" {
-            if config.dark_mode == "class" {
+            if dark_mode == "class" {
                 prefix_sel.push_str(".dark ");
             } else {
                 media_queries.push("@media (prefers-color-scheme: dark)".to_string());
@@ -1063,8 +1051,7 @@ fn compile_single_utility_rule(
     }
 
     let child_comb = resolved.child_combinator.unwrap_or("");
-    let escaped_class = escape_css_ident(full_class);
-    let selector = format!("{}.{}{}{}", prefix_sel, escaped_class, suffix_pseudo, child_comb);
+    let selector = format!("{}{}{}{}", prefix_sel, selector_base, suffix_pseudo, child_comb);
 
     let imp = if important { " !important" } else { "" };
     let decls_str: Vec<String> = resolved
@@ -1077,6 +1064,35 @@ fn compile_single_utility_rule(
     Some((weight, media_queries, rule, resolved.needs_keyframe))
 }
 
+fn compile_single_utility_rule(
+    full_class: &str,
+    config: &TailwindConfig,
+) -> Option<(u8, Vec<String>, String, Option<&'static str>)> {
+    let parts = split_variants_outside_brackets(full_class);
+    if parts.is_empty() {
+        return None;
+    }
+
+    let raw_util = *parts.last()?;
+    let (important, clean_util) = if let Some(u) = raw_util.strip_prefix('!') {
+        (true, u)
+    } else if let Some(first) = parts.first().filter(|p| p.starts_with('!') && parts.len() == 1) {
+        (true, &first[1..])
+    } else {
+        (false, raw_util)
+    };
+
+    let resolved = resolve_utility(clean_util)?;
+    let selector_base = format!(".{}", escape_css_ident(full_class));
+    build_rule_with_variants(
+        &selector_base,
+        &parts[..parts.len() - 1],
+        important,
+        resolved,
+        &config.dark_mode,
+    )
+}
+
 fn push_tokens(chunk: &str, out: &mut Vec<String>, seen: &mut HashSet<String>) {
     for tok in chunk.split_whitespace() {
         if seen.insert(tok.to_string()) {
@@ -1085,7 +1101,7 @@ fn push_tokens(chunk: &str, out: &mut Vec<String>, seen: &mut HashSet<String>) {
     }
 }
 
-fn extract_quoted_tokens_from_expr(expr: &str, out: &mut Vec<String>, seen: &mut HashSet<String>) {
+pub(crate) fn extract_quoted_tokens_from_expr(expr: &str, out: &mut Vec<String>, seen: &mut HashSet<String>) {
     let chars: Vec<char> = expr.chars().collect();
     let mut i = 0;
     while i < chars.len() {
@@ -1242,7 +1258,7 @@ fn expand_apply_directives(raw_css: &str) -> (String, bool, HashSet<&'static str
     (out.trim().to_string(), had_tailwind_syntax, keyframes)
 }
 
-fn keyframe_css(name: &str) -> &'static str {
+pub(crate) fn keyframe_css(name: &str) -> &'static str {
     match name {
         "spin" => "@keyframes spin { to { transform: rotate(360deg); } }",
         "ping" => "@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }",

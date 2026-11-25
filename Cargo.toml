@@ -1,6 +1,6 @@
 [package]
 name = "zvelte"
-version = "0.0.7"
+version = "0.0.8"
 edition = "2024"
 authors = ["Babar <babar@example.com>"]
 description = "A fast, multi-language reactive web framework supporting Python server blocks and Rust native C-ABI modules with fine-grained DOM reactivity."

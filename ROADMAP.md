@@ -15,6 +15,7 @@
 | **`v0.0.5`** | **Full Rust Core Rewrite (`std`-only), Python-First Scaffold & `examples/03-python-api`** | **✅ Released** |
 | **`v0.0.6`** | **Live Hot Reload Watcher, Scoped Reactivity Cleanup, Server Secret Isolation, Full Test Suite** | **✅ Released** |
 | **`v0.0.7`** | **Full Built-In Zero-Dependency Tailwind CSS Engine, `@apply`, Dynamic Classes & Theme Config** | **✅ Released** |
+| **`v0.0.8`** | **Full Built-In Zero-Dependency UnoCSS Engine: Attributify, Variant Groups, Shortcuts & `--at-apply`** | **✅ Released** |
 | `v0.1.0` | Stable Core Release: Client JS State Transform, Minification, XSS Audit, Multi-Component Imports | 🎯 Next |
 
 ---
@@ -50,6 +51,12 @@
 - [x] Built-in zero-dependency Rust Tailwind CSS compiler (`tailwind.rs`) with full 22-family color palette, opacity modifiers, arbitrary values, gradients, and animations.
 - [x] Stackable variant compiler (`sm:`..`2xl:`, `dark:`, `hover:`, `focus:`, `group-*`, `peer-*`, `before:`/`after:`, `!important`).
 - [x] `<style>` `@apply` directive expansion, Preflight `@layer base`, dynamic `class={...}` extraction, and `[tailwind]` configuration (plus optional external `tailwindcss` CLI mode).
+
+### Phase 7 — Full UnoCSS Engine (`v0.0.8`)
+- [x] Built-in zero-dependency Rust UnoCSS compiler (`unocss.rs`) sharing core primitives with `tailwind.rs`.
+- [x] Attributify Mode (`[attr]` boolean + `[attr~="val"]` grouped selectors with HTML/SVG attribute guards).
+- [x] Nested variant group expansion (`hover:(...)`, `dark:(...)`) in both CSS rules and JS DOM `setAttribute` bindings.
+- [x] Composable `[unocss.shortcuts]`, preset-uno shorthands (`c-*`, `op-*`, `fw-*`, `rd*`, `pa-*`, `lt-*`, `hocus:`, `p-6!`, `un-*`), `--at-apply:`, `@screen`, `@unocss`, and `theme()` directives.
 
 ---
 

@@ -29,6 +29,18 @@ preflight = true
 dark_mode = "media"          # Options: "media", "class"
 mode = "auto"                # Options: "auto", "builtin", "cli", "off"
 
+[unocss]
+enabled = true
+preflight = true
+attributify = true           # Enables boolean & grouped HTML attributify selectors
+variant_group = true         # Expands variant:(a b) in CSS and runtime JS DOM
+dark_mode = "class"          # Options: "media", "class"
+preset = "uno"               # Options: "uno", "wind3", "wind4", "mini"
+mode = "auto"                # Options: "auto", "builtin", "cli", "off"
+
+[unocss.shortcuts]
+uno-btn = "px-4 py-2 rounded-lg font-semibold hover:(opacity-90 scale-105)"
+
 [dev]
 host = "127.0.0.1"
 port = 3000
@@ -90,7 +102,19 @@ source_maps = true
 | `dark_mode` | string | `"media"` | `"media"` (`@media (prefers-color-scheme: dark)`) or `"class"` (`.dark ...`). |
 | `mode` | string | `"auto"` | `"auto"` / `"builtin"` (built-in Rust engine), `"cli"` (runs external `tailwindcss`), or `"off"`. |
 
-### 6. `[dev]`
+### 6. `[unocss]` & `[unocss.shortcuts]`
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Enables built-in UnoCSS compilation (`unocss = true` alias in `[style]`). |
+| `preflight` | bool | `true` | Emits `@layer base` CSS reset when UnoCSS utilities/directives or `[unocss]` are active. |
+| `attributify` | bool | `true` | Enables valueless `[attr]` and grouped `[attr~="val"]` CSS attribute selectors. |
+| `variant_group` | bool | `true` | Expands `variant:(...)` groups inside CSS rules and runtime JS `setAttribute` DOM emissions. |
+| `dark_mode` | string | `"media"` | `"media"` (`@media (prefers-color-scheme: dark)`) or `"class"` (`.dark ...`). |
+| `preset` | string | `"uno"` | Preset flavor: `"uno"`, `"wind3"`, `"wind4"`, or `"mini"`. |
+| `mode` | string | `"auto"` | `"auto"` / `"builtin"` (built-in Rust engine), `"cli"` (external `unocss` CLI), or `"off"`. |
+| `[unocss.shortcuts]` | key=value map | empty | Custom composable shortcut definitions (e.g., `btn = "px-4 py-2 rounded-lg"`). Alias: `[shortcuts]`. |
+
+### 7. `[dev]`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `host` | string | `"127.0.0.1"` | Bind IP address. |
@@ -98,7 +122,7 @@ source_maps = true
 | `hot_reload` | bool | `true` | Watches `app.toml` and entry `.zvelte` for edits, recompiles `.zvelte/dev`, restarts Python worker, and reloads connected browsers. |
 | `open_browser` | bool | `false` | Browser auto-open option flag. |
 
-### 7. `[build]`
+### 8. `[build]`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `output` / `out_dir` | string | `"dist"` | Directory where `zvelte build` writes production artifacts (`zvelte clean` removes this directory). |

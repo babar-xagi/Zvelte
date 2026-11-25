@@ -1,0 +1,129 @@
+<script lang="python" context="server">
+def analyze_tokens(preset: str, sample_count: int) -> str:
+    presets = {
+        "uno": ("UnoCSS Default + Attributify", 42, 1480),
+        "wind3": ("Wind3 Compatibility Mode", 36, 1240),
+        "mini": ("Minimal Atomic Core", 24, 820),
+    }
+    label, per_tok, base = presets.get(preset, presets["uno"])
+    total = base + int(sample_count) * per_tok
+    return f"{label} — {sample_count} rules (~{total} B gzip-ready CSS)"
+</script>
+
+<state>
+dark_theme: bool = true
+active_tab: string = "attributify"
+preset_name: string = "uno"
+token_count: i32 = 18
+summary_label: string = "UnoCSS Default + Attributify"
+est_bytes: i32 = 2236
+</state>
+
+<style>
+@unocss preflights;
+
+:root {
+  --uno-accent: theme('colors.sky.400');
+}
+
+.uno-hero-title {
+  --at-apply: text-3xl fw-bold tracking-tight c-sky-400;
+  text-shadow: 0 0 24px rgb(56 189 248 / 0.25);
+}
+
+.hero-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@screen md {
+  .hero-grid {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+</style>
+
+<div class={dark_theme ? "dark min-h-screen bg-slate-950 text-slate-100" : "min-h-screen bg-slate-100 text-slate-900"}>
+  <main max-w-6xl mxa p="x-6 y-8">
+    <header flex items-center justify-between gap-4 border="b slate-800" pb-6 lt-md:flex-col>
+      <div>
+        <span class="pill bg-sky-500/20 c-sky-400 un-inline-block mb-2">Zvelte v0.0.8 + UnoCSS Engine</span>
+        <h1 class="uno-hero-title">Atomic UnoCSS Showcase</h1>
+        <p op-80 text-sm mt-1>Zero-Node native Rust engine with Attributify, Variant Groups, Shortcuts, and Python RPC.</p>
+      </div>
+
+      <div flex items-center gap-3>
+        <button
+          id="toggle-theme-btn"
+          class="uno-btn bg-slate-800 text-slate-100 hover:(bg-slate-700 text-sky-300)"
+          click={dark_theme = !dark_theme}
+        >
+          Theme: {dark_theme ? "Dark" : "Light"}
+        </button>
+        <button
+          id="inspect-rpc-btn"
+          class="uno-btn-primary"
+          click={summary_label = analyze_tokens(preset_name, token_count)}
+        >
+          Analyze Preset
+        </button>
+      </div>
+    </header>
+
+    <section mt-8>
+      <div flex gap-3 mb-6>
+        <button
+          id="tab-attributify"
+          class={active_tab == "attributify" ? "uno-btn bg-emerald-500 text-white hover:(bg-emerald-400 scale-105)" : "uno-btn bg-slate-800 text-slate-300"}
+          click={active_tab = "attributify"; preset_name = "uno"; token_count = 24; est_bytes = 2488}
+        >
+          Attributify Mode
+        </button>
+        <button
+          id="tab-groups"
+          class={active_tab == "groups" ? "uno-btn bg-emerald-500 text-white hover:(bg-emerald-400 scale-105)" : "uno-btn bg-slate-800 text-slate-300"}
+          click={active_tab = "groups"; preset_name = "wind3"; token_count = 16; est_bytes = 1816}
+        >
+          Variant Groups
+        </button>
+        <button
+          id="tab-shortcuts"
+          class={active_tab == "shortcuts" ? "uno-btn bg-emerald-500 text-white hover:(bg-emerald-400 scale-105)" : "uno-btn bg-slate-800 text-slate-300"}
+          click={active_tab = "shortcuts"; preset_name = "mini"; token_count = 10; est_bytes = 1060}
+        >
+          Shortcuts & Apply
+        </button>
+      </div>
+
+      <div class="hero-grid">
+        <article class="uno-card dark:(bg-slate-900/90 hover:(border-sky-500/60))" p-6!>
+          <div flex-between mb-4>
+            <h2 text-lg fw-semibold c-sky-400>Live Preset Telemetry</h2>
+            <span class="pill bg-emerald-500/20 text-emerald-300">{preset_name}</span>
+          </div>
+          <p id="summary-text" op-80 text-sm mb-4>Active Tab: <strong>{active_tab}</strong> — {summary_label}</p>
+          <div grid grid-cols-2 gap-4>
+            <div bg="slate-950/60 hover:slate-900" border="~ slate-800 rounded-xl" p="4">
+              <div text-xs op-70>Sample Utility Count</div>
+              <div id="token-count" text-2xl fw-bold c-sky-400 mt-1>{token_count}</div>
+            </div>
+            <div bg="slate-950/60 hover:slate-900" border="~ slate-800 rounded-xl" p="4">
+              <div text-xs op-70>Estimated CSS Bundle</div>
+              <div id="est-bytes" text-2xl fw-bold text-emerald-400 mt-1>{est_bytes} B</div>
+            </div>
+          </div>
+        </article>
+
+        <aside bg="slate-900/80" border="~ slate-800" rd-2xl pa-5 shadow-xl pos-relative>
+          <h3 text-base fw-bold mb-3 c-amber-300 hocus:text-amber-200>UnoCSS Syntax Check</h3>
+          <ul space-y-2 text-sm op-85>
+            <li>1. Boolean & grouped Attributify attributes</li>
+            <li>2. Nested <code>variant:(a b)</code> expansion</li>
+            <li>3. Reusable TOML <code>[unocss.shortcuts]</code></li>
+            <li>4. Directives: <code>@unocss</code>, <code>--at-apply:</code>, <code>@screen</code>, <code>theme()</code></li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>

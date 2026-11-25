@@ -16,8 +16,9 @@ use zvelte::compiler::native_compiler::{
     compile_native_library, generate_ctypes_bindings, parse_exported_functions,
 };
 use zvelte::compiler::tailwind::compile_tailwind;
+use zvelte::compiler::unocss::{compile_all_styles, expand_variant_groups};
 use zvelte::config::toml_parser::{parse_app_toml, TomlError};
-use zvelte::config::types::{AppMode, Renderer, TailwindConfig};
+use zvelte::config::types::{AppMode, Renderer, TailwindConfig, UnoCssConfig};
 use zvelte::devserver::server::DevServer;
 use zvelte::semantic::analyzer::{analyze, SemanticError};
 use zvelte::source::ast::{NodeType, ScriptContext, ScriptLang};
@@ -574,6 +575,7 @@ fn test_all_repo_examples_check_and_build() {
         "03-python-api",
         "04-ai-chatbot",
         "05-tailwind-dashboard",
+        "06-unocss-showcase",
     ];
 
     for ex in examples {
@@ -595,6 +597,18 @@ fn test_all_repo_examples_check_and_build() {
                 "expected 30+ compiled Tailwind utilities in 05-tailwind-dashboard, got {}",
                 res.tailwind_utilities
             );
+        }
+        if ex == "06-unocss-showcase" {
+            assert!(
+                res.unocss_rules >= 20,
+                "expected 20+ compiled UnoCSS rules in 06-unocss-showcase, got {}",
+                res.unocss_rules
+            );
+            let html = fs::read_to_string(tmp.path().join("dist/index.html")).unwrap();
+            assert!(html.contains("@layer base"));
+            assert!(html.contains("[flex]"));
+            assert!(html.contains("[bg~=\"slate-950/60\"]"));
+            assert!(html.contains(".uno-card"));
         }
     }
 }
@@ -932,4 +946,159 @@ flag: bool = true
     assert_eq!(tw_out.utility_count, 0);
     assert!(tw_out.tailwind_base.is_empty());
     assert!(tw_out.tailwind_utilities.is_empty());
+
+    let unified_plain = compile_all_styles(
+        &plain_comp,
+        &TailwindConfig::default(),
+        &UnoCssConfig::default(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(unified_plain.tailwind_utilities, 0);
+    assert_eq!(unified_plain.unocss_rules, 0);
+    assert!(unified_plain.base_css.is_empty());
+    assert!(unified_plain.utilities_css.is_empty());
+}
+
+// =========================================================================
+// 8. Full UnoCSS Engine & Integration Tests (v0.0.8)
+// =========================================================================
+
+#[test]
+fn test_unocss_config_and_shortcuts_parsing() {
+    let toml = r#"
+[project]
+name = "uno-app"
+
+[unocss]
+enabled = true
+preflight = false
+attributify = true
+variant_group = true
+dark_mode = "class"
+preset = "wind3"
+mode = "builtin"
+
+[unocss.shortcuts]
+btn = "px-4 py-2 rounded-lg font-semibold"
+btn-primary = "btn bg-sky-500 text-white hover:(bg-sky-400 scale-105)"
+"#;
+    let cfg = parse_app_toml(toml).expect("unocss toml should parse");
+    assert!(cfg.unocss.enabled);
+    assert!(!cfg.unocss.preflight);
+    assert!(cfg.unocss.attributify);
+    assert!(cfg.unocss.variant_group);
+    assert_eq!(cfg.unocss.dark_mode, "class");
+    assert_eq!(cfg.unocss.preset, "wind3");
+    assert_eq!(cfg.unocss.mode, "builtin");
+    assert!(cfg.unocss.explicit);
+    assert_eq!(cfg.unocss.shortcuts.len(), 2);
+    assert_eq!(cfg.unocss.shortcuts[0].0, "btn");
+
+    let bad = "[unocss]\npreset = \"unknown-preset\"\n";
+    assert_eq!(
+        parse_app_toml(bad),
+        Err(TomlError::InvalidValue("unknown-preset".to_string()))
+    );
+}
+
+#[test]
+fn test_unocss_variant_group_expansion_and_arbitrary_safety() {
+    assert_eq!(
+        expand_variant_groups("hover:(bg-sky-500 text-white)"),
+        "hover:bg-sky-500 hover:text-white"
+    );
+    assert_eq!(
+        expand_variant_groups("dark:(bg-slate-900 hover:(text-sky-400 font-bold))"),
+        "dark:bg-slate-900 dark:hover:text-sky-400 dark:hover:font-bold"
+    );
+    // Arbitrary CSS values containing parentheses must stay untouched
+    assert_eq!(
+        expand_variant_groups("bg-[rgb(1,2,3)] w-[calc(100%-2rem)] [color:var(--accent)]"),
+        "bg-[rgb(1,2,3)] w-[calc(100%-2rem)] [color:var(--accent)]"
+    );
+}
+
+#[test]
+fn test_unocss_attributify_shortcuts_shorthands_directives_and_dom_codegen() {
+    let src = r#"
+<state>
+active: bool = true
+</state>
+<style>
+@unocss preflights;
+.uno-title {
+    --at-apply: c-sky-400 fw-bold op-90;
+    border-color: theme('colors.sky.400');
+}
+@screen md {
+    .uno-grid { gap: theme('spacing.6'); }
+}
+</style>
+<div flex items-center bg-slate-900/80 bg="slate-900 hover:slate-800" p="x-4 y-2" border="~ slate-700 rounded-xl">
+  <button class={active ? "uno-btn hover:(bg-sky-500 text-white)" : "pa-4 c-slate-300 op-70 fw-medium rd-lg lt-md:hidden hocus:text-sky-300 un-flex p-6!"}>Action</button>
+  <input type="text" size="20" placeholder="Safe HTML attrs" />
+</div>
+"#;
+    let comp = parse_component(src).expect("parse unocss component");
+    let mut uno_cfg = UnoCssConfig::default();
+    uno_cfg.dark_mode = "class".to_string();
+    uno_cfg.explicit = true;
+    uno_cfg.shortcuts = vec![
+        ("pill".to_string(), "px-3 py-1 rounded-full".to_string()),
+        ("uno-btn".to_string(), "pill bg-slate-800 text-white".to_string()),
+    ];
+
+    let mut codegen = JsCodegen::new(&comp, "uno-test");
+    let out = codegen
+        .generate_with_styles(&TailwindConfig::default(), &uno_cfg, None)
+        .expect("generate unocss output");
+
+    // JS runtime class attributes have expanded variant groups so browser selectors match
+    assert!(
+        out.js.contains("hover:bg-sky-500 hover:text-white"),
+        "dynamic class expr variant groups must expand in JS, got:\n{}",
+        out.js
+    );
+
+    // Directives: @unocss preflights + --at-apply + theme() + @screen md
+    assert!(out.html.contains("@layer base"));
+    assert!(out.html.contains("color: rgb(56 189 248);"));
+    assert!(out.html.contains("font-weight: 700;"));
+    assert!(out.html.contains("opacity: 0.9;"));
+    assert!(out.html.contains("border-color: rgb(56 189 248);"));
+    assert!(out.html.contains("@media (min-width: 768px)"));
+    assert!(out.html.contains("gap: 1.5rem;"));
+
+    // Attributify boolean + valueless with slash + grouped selectors
+    assert!(out.html.contains("[flex] { display: flex; }"));
+    assert!(out.html.contains("[items-center] { align-items: center; }"));
+    assert!(out.html.contains("[bg-slate-900\\/80] { background-color: rgb(15 23 42 / 0.8); }"));
+    assert!(out.html.contains("[bg~=\"slate-900\"] { background-color: rgb(15 23 42); }"));
+    assert!(out.html.contains("[bg~=\"hover:slate-800\"]:hover { background-color: rgb(30 41 59); }"));
+    assert!(out.html.contains("[p~=\"x-4\"] { padding-left: 1rem; padding-right: 1rem; }"));
+    assert!(out.html.contains("[border~=\"~\"]"));
+    assert!(out.html.contains("[border~=\"rounded-xl\"] { border-radius: 0.75rem; }"));
+
+    // Nested shortcut rule ordering (emitted BEFORE utilities so utility override wins)
+    let shortcut_pos = out.html.find(".uno-btn { padding-left: 0.75rem;").expect("shortcut padding");
+    let util_pos = out.html.find(".hover\\:bg-sky-500:hover").expect("expanded utility");
+    assert!(shortcut_pos < util_pos, "shortcuts must precede utility rules");
+
+    // Shorthands, lt-md, hocus, un- prefix, trailing ! important
+    assert!(out.html.contains(".pa-4 { padding: 1rem; }"));
+    assert!(out.html.contains(".c-slate-300 { color: rgb(203 213 225); }"));
+    assert!(out.html.contains(".op-70 { opacity: 0.7; }"));
+    assert!(out.html.contains(".fw-medium { font-weight: 500; }"));
+    assert!(out.html.contains(".rd-lg { border-radius: 0.5rem; }"));
+    assert!(out.html.contains("@media (max-width: 767.9px)"));
+    assert!(out.html.contains(".lt-md\\:hidden { display: none; }"));
+    assert!(out.html.contains(".hocus\\:text-sky-300:is(:hover,:focus)"));
+    assert!(out.html.contains(".un-flex { display: flex; }"));
+    assert!(out.html.contains(".p-6\\! { padding: 1.5rem !important; }"));
+
+    // Standard <input type="text" size="20" placeholder="..."> must NOT trigger attributify rules
+    assert!(!out.html.contains("[size~=\"20\"]"));
+    assert!(!out.html.contains("[type~=\"text\"]"));
+    assert!(!out.html.contains("[placeholder~="));
 }

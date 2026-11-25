@@ -63,6 +63,8 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
             current_section = line[1..line.len() - 1].trim().to_string();
             if current_section == "tailwind" || current_section == "style" {
                 config.tailwind.explicit = true;
+            } else if current_section == "unocss" || current_section == "unocss.shortcuts" {
+                config.unocss.explicit = true;
             }
             continue;
         }
@@ -167,8 +169,52 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
                             return Err(TomlError::InvalidValue(val_unquoted.to_string()));
                         }
                     }
+                    "unocss" => {
+                        config.unocss.enabled = val_unquoted == "true";
+                        config.unocss.explicit = true;
+                    }
                     _ => {}
                 },
+                "unocss" => match key {
+                    "enabled" => {
+                        config.unocss.enabled = val_unquoted == "true";
+                        config.unocss.explicit = true;
+                    }
+                    "preflight" => config.unocss.preflight = val_unquoted == "true",
+                    "attributify" => config.unocss.attributify = val_unquoted == "true",
+                    "variant_group" | "variantGroup" => {
+                        config.unocss.variant_group = val_unquoted == "true"
+                    }
+                    "dark_mode" | "darkMode" => {
+                        if matches!(val_unquoted, "media" | "class") {
+                            config.unocss.dark_mode = val_unquoted.to_string();
+                        } else {
+                            return Err(TomlError::InvalidValue(val_unquoted.to_string()));
+                        }
+                    }
+                    "preset" => {
+                        if matches!(val_unquoted, "uno" | "wind3" | "wind4" | "mini") {
+                            config.unocss.preset = val_unquoted.to_string();
+                        } else {
+                            return Err(TomlError::InvalidValue(val_unquoted.to_string()));
+                        }
+                    }
+                    "mode" => {
+                        if matches!(val_unquoted, "auto" | "builtin" | "cli" | "off") {
+                            config.unocss.mode = val_unquoted.to_string();
+                            if val_unquoted == "off" {
+                                config.unocss.enabled = false;
+                            }
+                        } else {
+                            return Err(TomlError::InvalidValue(val_unquoted.to_string()));
+                        }
+                    }
+                    _ => {}
+                },
+                "unocss.shortcuts" | "shortcuts" => {
+                    config.unocss.explicit = true;
+                    config.unocss.shortcuts.push((key.to_string(), val_unquoted.to_string()));
+                }
                 _ => {}
             }
         }

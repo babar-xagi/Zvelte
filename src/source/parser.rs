@@ -627,7 +627,7 @@ impl<'a> Parser<'a> {
 
             let mut attr_name = String::new();
             while let Some(c) = self.peek() {
-                if c == '=' || c.is_whitespace() || c == '>' || c == '/' {
+                if c == '=' || c.is_whitespace() || c == '>' || (c == '/' && self.starts_with("/>")) {
                     break;
                 }
                 attr_name.push(c);

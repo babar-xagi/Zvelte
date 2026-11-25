@@ -6,7 +6,7 @@ use crate::semantic::analyzer::analyze;
 use crate::compiler::codegen::build_project;
 use crate::devserver::server::DevServer;
 
-pub const VERSION: &str = "0.0.7";
+pub const VERSION: &str = "0.0.8";
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {
@@ -91,13 +91,20 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let res = build_project(proj_dir, out_dir)?;
 
             println!("\x1b[32m✔\x1b[0m Production build complete in \x1b[1m{}/\x1b[0m", res.output_dir);
-            if res.tailwind_utilities > 0 {
-                println!(
+            match (res.tailwind_utilities, res.unocss_rules) {
+                (tw, uno) if tw > 0 && uno > 0 => println!(
+                    "  ├── index.html ({} bytes, {} Tailwind utilities, {} UnoCSS rules)",
+                    res.html_bytes, tw, uno
+                ),
+                (tw, 0) if tw > 0 => println!(
                     "  ├── index.html ({} bytes, {} Tailwind utilities)",
-                    res.html_bytes, res.tailwind_utilities
-                );
-            } else {
-                println!("  ├── index.html ({} bytes)", res.html_bytes);
+                    res.html_bytes, tw
+                ),
+                (0, uno) if uno > 0 => println!(
+                    "  ├── index.html ({} bytes, {} UnoCSS rules)",
+                    res.html_bytes, uno
+                ),
+                _ => println!("  ├── index.html ({} bytes)", res.html_bytes),
             }
             println!("  └── app.js ({} bytes)", res.js_bytes);
             if res.worker_bytes > 0 {

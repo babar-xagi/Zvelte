@@ -24,6 +24,7 @@ flowchart TD
         SEM["Semantic Analyzer (analyzer.rs)"]
         JSGEN["Scoped DOM & RPC Codegen (js_codegen.rs)"]
         TW["Tailwind CSS Compiler (tailwind.rs)"]
+        UNO["UnoCSS Engine (unocss.rs)"]
         PYGEN["Python Worker Gen (codegen.rs)"]
         NAT["Optional Rust C-ABI Compiler (native_compiler.rs)"]
     end
@@ -36,7 +37,7 @@ flowchart TD
 
     TOML --> CFG --> SEM
     SFC --> PAR --> SEM
-    SEM --> TW --> JSGEN
+    SEM --> TW --> UNO --> JSGEN
     SEM --> PYGEN
     SEM --> NAT
     NAT -. ctypes .-> PY
@@ -58,7 +59,7 @@ The parser in [`src/source/parser.rs`](../src/source/parser.rs) splits the compo
 | Optional Native Rust | `<script lang="rust">` | Raw Rust extraction (`extern "C" fn`) in `hybrid`/`rust` mode | `libnative.so` / `native.dll` + `ctypes` |
 | Explicit State | `<state>` | Typed declarations (`count: i32 = 0`) | `const state = { ... }` |
 | Template & Directives | Markup, `{expr}`, `click={...}`, `bind:value`, `{#if}`, `{#each}` | Recursive element/block AST + quote-aware `{}` scanner + `<!-- -->` comment skipping | Fine-grained DOM instructions |
-| Styles | `<style>` | Raw CSS extraction | `<style>` inside `index.html` |
+| Styles | `<style>` | Raw CSS extraction + `@apply`/`--at-apply:`, `@screen`, `theme()`, `@tailwind`/`@unocss` directives | Unified Preflight + custom + utility/attributify `<style>` inside `index.html` |
 
 ### Server Secret Isolation
 `extract_script_state_variables` strictly filters top-level assignments through `normalize_safe_literal`:

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.8] - 2026-11-25
+
+### ⚡ Full Built-In Zero-Dependency UnoCSS Engine
+
+#### ✨ Core Features
+- **Pure Rust UnoCSS Compiler ([unocss.rs](src/compiler/unocss.rs)):** Built-in zero-Node UnoCSS engine sharing core palette/variant primitives with [tailwind.rs](src/compiler/tailwind.rs) for single-pass CSS compilation (`PREFLIGHT_CSS` and `@keyframes` emitted once).
+- **Attributify Mode:** Supports both valueless boolean utility attributes (`<header flex items-center pb-6 bg-slate-900/80>`) -> `[attr]` CSS selectors and grouped attributes (`bg="slate-950/60 hover:slate-900"`, `p="x-6 y-8"`, `border="~ slate-800 rounded-xl"`, `hover="bg-sky-500 text-white"`) -> `[attr~="val"]` selectors while guarding standard HTML, `aria-*`, `data-*`, SVG presentation, and `<input size>` attributes.
+- **Variant Group Expansion (`variant:(a b c)`):** Expands single and nested variant groups (`dark:(bg-slate-900/90 hover:(border-sky-500/60 scale-105))`) across BOTH compiled CSS rules AND runtime JS `setAttribute` DOM generation (including dynamic ternaries/template expressions), while leaving arbitrary CSS parens (`bg-[rgb(1,2,3)]`, `w-[calc(100%-2rem)]`) untouched.
+- **TOML Shortcuts (`[unocss.shortcuts]`):** Supports composable and recursive shortcuts with cycle detection (`pill`, `uno-card`, `uno-btn`, `uno-btn-primary`) configured in `app.toml`, emitted before utility layers so explicit overrides always win.
+- **Preset-Uno Shorthands & Variants:** Adds `flex-center`, `inline-flex-center`, `flex-col-center`, `flex-between`, `flex-around`, `grid-center`, `pa-*`, `c-*`, `op-*`, `fw-*`, `lh-*`, `ws-*`, `ta-*`, `fs-*`, `cur-*`, `of-*`, `pos-*`, `rd*`, `b*`/`bx*`/`by*`/`bt*`/`br*`/`bb*`/`bl*`, `ma`/`mxa`/`mya`, `un-` prefix, trailing `!` important modifier (`p-6!`), `lt-sm`..`lt-2xl`, `hocus:`, `children:`, `all:`, and `not-*` variants.
+- **CSS Directives & Functions:** Expands `--at-apply:`, `@apply`, `@screen sm..2xl` / `@screen lt-*`, `@unocss;`, `@unocss preflights;`, `@import "unocss";`, and `theme('colors.sky.400')` / `theme('spacing.6')` inside `<style>`, plus optional `mode = "cli"` external `unocss` binary support.
+- **Parser Slashed Attribute Fix ([parser.rs](src/source/parser.rs)):** Preserves slashes `/` inside valueless attributify attribute names such as `bg-slate-900/80` and `w-1/2` while cleanly stopping at self-closing `/>`.
+- **New Showcase Example:** Added [`examples/06-unocss-showcase`](examples/06-unocss-showcase/) featuring Attributify Mode, nested variant groups, shortcuts, `--at-apply:`, `@screen`, `theme()`, and Python JSON-RPC telemetry.
+
+#### 🧪 Test Suite
+- Expanded test suite to **29 passing tests** (`cargo test`: 2 lib unit tests + 27 integration tests), adding verification for `[unocss]` / `[unocss.shortcuts]` TOML parsing, nested variant groups + arbitrary parens safety, attributify boolean/grouped selectors, shortcut layering order, JS DOM expansion, HTML/SVG attribute guards, and all 6 repository examples.
+
+---
+
 ## [0.0.7] - 2026-11-25
 
 ### 🎨 Full Built-In Zero-Dependency Tailwind CSS Engine

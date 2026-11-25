@@ -5,17 +5,17 @@
 
 [![Rust 1.85+](https://img.shields.io/badge/Engine-Rust%202024-orange.svg)](https://www.rust-lang.org/)
 [![Python 3.10+](https://img.shields.io/badge/Language-Python%203.10+-blue.svg)](https://www.python.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20CSS-38bdf8.svg)](https://tailwindcss.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20%2B%20UnoCSS-38bdf8.svg)](https://unocss.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v0.0.7](https://img.shields.io/badge/Release-v0.0.7-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.7)
+[![Release: v0.0.8](https://img.shields.io/badge/Release-v0.0.8-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.8)
 
 ---
 
 ## 🌟 Highlights
 
 - 🐍 **Developed for Python:** Write Python backend functions, AI pipelines, database queries, and data processing directly inside your component (`<script lang="python">`).
-- 🎨 **Full Built-In Tailwind CSS (Zero Node.js):** Use standard Tailwind utility classes, responsive breakpoints (`sm:`..`2xl:`), `dark:` mode, opacity modifiers (`bg-sky-500/80`), arbitrary values (`w-[320px]`), gradients, animations, and CSS `@apply` — compiled in milliseconds purely by Rust with zero `npm` or `node_modules`.
-- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond compilation, ~613 KB release binaries, and memory safety.
+- 🎨 **Full Built-In Tailwind CSS & UnoCSS (Zero Node.js):** Use standard Tailwind utility classes OR full UnoCSS workflows — **Attributify Mode** (`<div flex items-center bg="slate-900 hover:slate-800" p="x-4 y-2">`), **Nested Variant Groups** (`hover:(bg-sky-500 text-white)`), **`[unocss.shortcuts]`** in `app.toml`, preset-uno shorthands (`c-*`, `op-*`, `fw-*`, `rd*`, `pa-*`, `lt-md:*`, `hocus:*`, `p-6!`), and CSS `--at-apply:` / `@screen` / `theme()` — compiled in milliseconds purely by Rust with zero `npm` or `node_modules`.
+- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-5ms builds, ~672 KB release binaries, and memory safety.
 - 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Scoped reactive subscriptions directly update affected DOM text cells, attributes, conditionals (`{#if}`), and keyed loops (`{#each}`).
 - 🔥 **Live Hot Reload Dev Server:** Built-in HTTP server (`zvelte dev`) with automatic port fallback, `hot_reload` file watching for `app.toml` and `.zvelte`, and supervised CPython worker restarts.
 - 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no `node_modules`.
@@ -95,6 +95,7 @@ Browse working example applications in [`examples/`](examples/):
 - 🐍 **[03-python-api](examples/03-python-api/):** Python server functions (`datetime`, `math`, `platform`) invoked over JSON-RPC.
 - 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini & OpenAI GPT-4o with zero pip dependencies.
 - 🎨 **[05-tailwind-dashboard](examples/05-tailwind-dashboard/):** Responsive Tailwind CSS + dark mode dashboard with `@apply`, gradients, dynamic classes, and live Python analytics RPC.
+- ⚡ **[06-unocss-showcase](examples/06-unocss-showcase/):** Full UnoCSS playground featuring Attributify Mode, nested variant groups, TOML `[unocss.shortcuts]`, `--at-apply:`, `@screen`, `theme()`, and Python RPC.
 
 ---
 
@@ -198,6 +199,7 @@ flowchart TD
         CFG["TOML Parser (toml_parser.rs)"]
         PARSER["SFC Parser (parser.rs)"]
         SEM["Semantic Analyzer (analyzer.rs)"]
+        STYLE["Tailwind + UnoCSS Engine (tailwind.rs / unocss.rs)"]
         PYGEN["Python Worker Gen (codegen.rs)"]
         JSGEN["Scoped Fine-Grained DOM Codegen (js_codegen.rs)"]
     end
@@ -210,8 +212,9 @@ flowchart TD
     TOML --> CFG
     SFC --> PARSER
     PARSER --> SEM
+    SEM --> STYLE
+    STYLE --> JSGEN
     SEM --> PYGEN
-    SEM --> JSGEN
 
     PYGEN --> PYWORKER
     JSGEN --> CLIENT

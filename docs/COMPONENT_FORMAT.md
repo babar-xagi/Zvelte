@@ -119,20 +119,29 @@ Supported events: `click`, `input`, `change`, `submit`, `keydown`, `keyup`:
 
 ---
 
-## 🎨 4. Styles & Full Tailwind CSS (`<style>` & Utility Classes)
+## 🎨 4. Styles, Tailwind CSS & UnoCSS (`<style>`, Attributify & Utility Classes)
 
-CSS declared inside `<style>...</style>` is injected into the generated HTML `<head>`. In addition, **Zvelte (`v0.0.7+`) includes a full zero-dependency Tailwind CSS compiler**:
+CSS declared inside `<style>...</style>` is injected into the generated HTML `<head>`. In addition, **Zvelte (`v0.0.8+`) includes built-in zero-dependency Tailwind CSS (`v0.0.7+`) and UnoCSS (`v0.0.8+`) engines**:
 
 - **Utility Classes Directly in HTML:** Write `class="flex items-center justify-between p-6 bg-slate-900 text-sky-400 rounded-xl shadow-lg"` with zero `npm` or `node_modules`.
-- **Full Variants & Breakpoints:** Stack modifiers freely — `dark:md:hover:bg-indigo-600/90`, `focus:ring-2`, `group-hover:opacity-100`, `peer-checked:bg-emerald-500`, `before:content-['*']`, `!p-4`.
+- **Full Variants & Breakpoints:** Stack modifiers freely — `dark:md:hover:bg-indigo-600/90`, `focus:ring-2`, `group-hover:opacity-100`, `peer-checked:bg-emerald-500`, `before:content-['*']`, `!p-4` / `p-6!`, plus UnoCSS `lt-sm`..`lt-2xl`, `hocus:`, `children:`, `all:`, and `not-*`.
+- **UnoCSS Attributify Mode:** Write boolean utilities (`<header flex items-center pb-6 bg-slate-900/80>`) and grouped attribute selectors (`bg="slate-950/60 hover:slate-900"`, `p="x-6 y-8"`, `border="~ slate-800 rounded-xl"`, `hover="bg-sky-500 text-white"`). Standard HTML (`type`, `size` on inputs, `placeholder`, `data-*`, `aria-*`, SVG presentation attrs) are preserved automatically.
+- **UnoCSS Variant Groups (`variant:(a b)`):** Nested variant groups like `dark:(bg-slate-900/90 hover:(border-sky-500/60 scale-105))` are expanded in both CSS rules AND runtime JS DOM bindings (`setAttribute`), while arbitrary CSS parentheses (`bg-[rgb(1,2,3)]`, `w-[calc(100%-2rem)]`) stay intact.
+- **UnoCSS Preset Shorthands & `un-` Prefix:** `flex-center`, `flex-between`, `flex-col-center`, `grid-center`, `c-*`, `op-*`, `fw-*`, `rd*`, `pa-*`, `b*`, `pos-*`, `of-*`, `ma`/`mxa`/`mya`, and optional `un-flex` / `un-text-emerald-400`.
+- **Shortcuts (`[unocss.shortcuts]`):** Reusable shortcuts defined in `app.toml` expand cleanly before utility layers so explicit classes always override.
 - **Arbitrary Values & Colors:** `w-[320px]`, `bg-[#1e293b]/80`, `z-[100]`, `[mask-type:alpha]`.
-- **Dynamic Reactive Classes:** Classes inside ternary expressions (`class={open ? "block bg-emerald-500" : "hidden"}`) and backtick templates (`` class={`p-4 ${dark ? 'bg-slate-950' : 'bg-white'}`} ``) are automatically extracted and compiled.
-- **CSS `@apply` & Directives inside `<style>`:**
+- **Dynamic Reactive Classes:** Classes inside ternary expressions (`class={open ? "hover:(bg-emerald-500 scale-105)" : "hidden"}`) and backtick templates (`` class={`p-4 ${dark ? 'bg-slate-950' : 'bg-white'}`} ``) are automatically extracted and compiled.
+- **CSS `@apply`, `--at-apply:`, `@screen` & `theme()` inside `<style>`:**
   ```html
   <style>
+  @unocss preflights;
+  :root { --accent: theme('colors.sky.400'); }
   .pill-badge {
-      @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400;
+      --at-apply: inline-flex items-center px-3 py-1 rd-full text-xs fw-semibold bg-sky-500/10 c-sky-400;
+  }
+  @screen md {
+      .hero-grid { grid-template-columns: 1.4fr 1fr; }
   }
   </style>
   ```
-- **Zero Overhead When Unused:** If a component uses only custom CSS classes and does not explicitly configure `[tailwind]` in `app.toml`, no Tailwind Preflight or extra CSS is injected.
+- **Zero Overhead When Unused:** If a component uses only custom CSS classes and does not explicitly configure `[tailwind]` or `[unocss]` in `app.toml`, no Preflight or extra utility CSS is injected.

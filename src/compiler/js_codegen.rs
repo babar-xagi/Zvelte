@@ -10,6 +10,7 @@ pub struct JsCodegen<'a> {
     project_name: &'a str,
     var_id: usize,
     _in_dynamic_block: bool,
+    expand_variant_groups: bool,
 }
 
 impl<'a> JsCodegen<'a> {
@@ -19,6 +20,7 @@ impl<'a> JsCodegen<'a> {
             project_name,
             var_id: 0,
             _in_dynamic_block: false,
+            expand_variant_groups: true,
         }
     }
 
@@ -394,23 +396,41 @@ impl<'a> JsCodegen<'a> {
 
                 // Attributes
                 for attr in &node.attributes {
+                    let expand_attr = self.expand_variant_groups
+                        && (attr.name == "class"
+                            || crate::compiler::unocss::is_grouped_attributify_attr(
+                                &node.tag,
+                                &attr.name,
+                            ));
+                    let attr_name_esc = Self::escape_js_string(&attr.name);
+
                     if attr.value.starts_with('{') && attr.value.ends_with('}') && attr.value.len() >= 2 {
                         let expr = &attr.value[1..attr.value.len() - 1];
-                        let formatted = self.format_expr(expr);
+                        let normalized_expr = if expand_attr {
+                            crate::compiler::unocss::expand_variant_groups_in_expr(expr)
+                        } else {
+                            expr.to_string()
+                        };
+                        let formatted = self.format_expr(&normalized_expr);
                         sb.push_str(&format!(
                             "    {}.setAttribute(\"{}\", {});\n",
-                            el_var, attr.name, formatted
+                            el_var, attr_name_esc, formatted
                         ));
                         sb.push_str(&format!(
                             "    subscribe(() => {{ {}.setAttribute(\"{}\", {}); }});\n",
-                            el_var, attr.name, formatted
+                            el_var, attr_name_esc, formatted
                         ));
                     } else {
+                        let val = if expand_attr && !attr.value.is_empty() {
+                            crate::compiler::unocss::expand_variant_groups(&attr.value)
+                        } else {
+                            attr.value.clone()
+                        };
                         sb.push_str(&format!(
                             "    {}.setAttribute(\"{}\", \"{}\");\n",
                             el_var,
-                            Self::escape_js_string(&attr.name),
-                            Self::escape_js_string(&attr.value)
+                            attr_name_esc,
+                            Self::escape_js_string(&val)
                         ));
                     }
                 }
@@ -590,11 +610,15 @@ impl<'a> JsCodegen<'a> {
     }
 
     pub fn generate(&mut self) -> CodegenOutput {
-        self.generate_with_tailwind(&crate::config::types::TailwindConfig::default(), None)
-            .unwrap_or_else(|_| CodegenOutput {
-                html: self.generate_html(),
-                js: self.generate_js(),
-            })
+        self.generate_with_styles(
+            &crate::config::types::TailwindConfig::default(),
+            &crate::config::types::UnoCssConfig::default(),
+            None,
+        )
+        .unwrap_or_else(|_| CodegenOutput {
+            html: self.generate_html(),
+            js: self.generate_js(),
+        })
     }
 
     pub fn generate_with_tailwind(
@@ -614,5 +638,36 @@ impl<'a> JsCodegen<'a> {
         );
         let js = self.generate_js();
         Ok(CodegenOutput { html, js })
+    }
+
+    pub fn generate_with_styles(
+        &mut self,
+        tailwind_cfg: &crate::config::types::TailwindConfig,
+        unocss_cfg: &crate::config::types::UnoCssConfig,
+        project_dir: Option<&std::path::Path>,
+    ) -> Result<CodegenOutput, String> {
+        let styles = crate::compiler::unocss::compile_all_styles(
+            self.component,
+            tailwind_cfg,
+            unocss_cfg,
+            project_dir,
+        )?;
+        Ok(self.generate_with_prebuilt_styles(&styles, unocss_cfg))
+    }
+
+    pub fn generate_with_prebuilt_styles(
+        &mut self,
+        styles: &crate::compiler::unocss::UnifiedCssOutput,
+        unocss_cfg: &crate::config::types::UnoCssConfig,
+    ) -> CodegenOutput {
+        self.expand_variant_groups =
+            unocss_cfg.enabled && unocss_cfg.mode != "off" && unocss_cfg.variant_group;
+        let html = self.generate_html_with_css(
+            Some(&styles.base_css),
+            &styles.processed_custom_style,
+            Some(&styles.utilities_css),
+        );
+        let js = self.generate_js();
+        CodegenOutput { html, js }
     }
 }
