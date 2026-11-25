@@ -5,15 +5,17 @@
 
 [![Rust 1.85+](https://img.shields.io/badge/Engine-Rust%202024-orange.svg)](https://www.rust-lang.org/)
 [![Python 3.10+](https://img.shields.io/badge/Language-Python%203.10+-blue.svg)](https://www.python.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20CSS-38bdf8.svg)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v0.0.6](https://img.shields.io/badge/Release-v0.0.6-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.6)
+[![Release: v0.0.7](https://img.shields.io/badge/Release-v0.0.7-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.7)
 
 ---
 
 ## 🌟 Highlights
 
 - 🐍 **Developed for Python:** Write Python backend functions, AI pipelines, database queries, and data processing directly inside your component (`<script lang="python">`).
-- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond compilation, sub-500 KB stripped release binaries, and memory safety.
+- 🎨 **Full Built-In Tailwind CSS (Zero Node.js):** Use standard Tailwind utility classes, responsive breakpoints (`sm:`..`2xl:`), `dark:` mode, opacity modifiers (`bg-sky-500/80`), arbitrary values (`w-[320px]`), gradients, animations, and CSS `@apply` — compiled in milliseconds purely by Rust with zero `npm` or `node_modules`.
+- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-millisecond compilation, ~613 KB release binaries, and memory safety.
 - 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Scoped reactive subscriptions directly update affected DOM text cells, attributes, conditionals (`{#if}`), and keyed loops (`{#each}`).
 - 🔥 **Live Hot Reload Dev Server:** Built-in HTTP server (`zvelte dev`) with automatic port fallback, `hot_reload` file watching for `app.toml` and `.zvelte`, and supervised CPython worker restarts.
 - 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no `node_modules`.
@@ -92,6 +94,7 @@ Browse working example applications in [`examples/`](examples/):
 - 📝 **[02-todo-app](examples/02-todo-app/):** Task manager with `{#each}` lists, `{#if}` banners, and `bind:value` form bindings.
 - 🐍 **[03-python-api](examples/03-python-api/):** Python server functions (`datetime`, `math`, `platform`) invoked over JSON-RPC.
 - 🤖 **[04-ai-chatbot](examples/04-ai-chatbot/):** Full AI chatbot supporting Google Gemini & OpenAI GPT-4o with zero pip dependencies.
+- 🎨 **[05-tailwind-dashboard](examples/05-tailwind-dashboard/):** Responsive Tailwind CSS + dark mode dashboard with `@apply`, gradients, dynamic classes, and live Python analytics RPC.
 
 ---
 

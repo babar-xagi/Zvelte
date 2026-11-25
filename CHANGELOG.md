@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.7] - 2026-11-25
+
+### 🎨 Full Built-In Zero-Dependency Tailwind CSS Engine
+
+#### ✨ Core Features
+- **Pure Rust Tailwind CSS Compiler ([tailwind.rs](src/compiler/tailwind.rs)):** Built-in utility CSS compiler requiring zero Node.js, zero npm, and zero `node_modules` (sub-4ms full component + 98-utility dashboard compilation).
+- **Complete Tailwind Color Palette & Opacity:** All 22 standard Tailwind color families (`50`–`950`), `black`/`white`/`transparent`/`current`, `/0`–`/100` opacity modifiers (`bg-sky-500/80`), arbitrary hex/rgb colors (`bg-[#1e293b]/80`), and CSS gradients (`bg-gradient-to-*`, `from-*`, `via-*`, `to-*`).
+- **Full Utility Coverage & Variants:** Layout, flexbox, grid, spacing (with negatives & `ps`/`pe`/`ms`/`me`), sizing (fractions & `size-*`), typography (`line-clamp-*`, tracking, leading), borders/rounded/rings, shadows, backdrop blur, transitions, `@keyframes` animations (`animate-spin/ping/pulse/bounce`), important (`!`), and arbitrary properties (`[mask-type:alpha]`).
+- **Stackable Modifiers:** Responsive breakpoints (`sm:`..`2xl:`, `max-*:`), `dark:` (`media` & `.dark` class modes), pseudo-classes (`hover:`, `focus:`, `focus-visible:`, `disabled:`, `first:`, `odd:`, etc.), `group-*` / `peer-*`, and pseudo-elements (`before:`, `after:`, `placeholder:`, `selection:`).
+- **`@apply` & Directives Support:** Expands `@apply ...;` rules inside `<style>` alongside `@tailwind base/components/utilities` and `@import "tailwindcss"`.
+- **Dynamic Class Expression Scanning:** Extracts utilities from ternary `class={cond ? "..." : "..."}` and backtick template expressions `` class={`... ${cond ? '...' : '...'}`} `` cleanly (`format_expr` now recursively formats `${...}` inside template literals).
+- **Zero-Overhead Auto Preflight & `[tailwind]` Config:** Configured via `[tailwind]` / `[style]` in `app.toml` (`enabled`, `preflight`, `dark_mode`, `mode = "auto" | "builtin" | "cli" | "off"`), automatically skipping Preflight overhead when no Tailwind classes are used unless `[tailwind]` is declared explicitly.
+- **New Showcase Example:** Added [`examples/05-tailwind-dashboard`](examples/05-tailwind-dashboard/) demonstrating theme toggling, responsive cards, gradients, `@apply`, and Python RPC.
+
+#### 🧪 Test Suite
+- Expanded integration & unit test suite to **26 passing tests** (`cargo test`: 2 lib unit tests + 24 integration tests), verifying Tailwind utilities, stacked variants, gradients, `@apply`, backtick dynamic classes, zero-overhead mode, and all 5 example apps.
+
+---
+
 ## [0.0.6] - 2026-11-25
 
 ### 🛡️ Security Hardening, Live Hot Reload, Parser Fixes & Comprehensive Test Suite

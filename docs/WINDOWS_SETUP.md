@@ -1,6 +1,6 @@
 # 🪟 Windows Setup and User Guide for Zvelte
 
-> Complete step-by-step instructions for installing, building, and using **Zvelte** (`v0.0.6`, Rust Core + Python) on **Windows 10 / 11** using PowerShell or Windows Terminal.
+> Complete step-by-step instructions for installing, building, and using **Zvelte** (`v0.0.7`, Rust Core + Python + Tailwind CSS) on **Windows 10 / 11** using PowerShell or Windows Terminal.
 
 ---
 

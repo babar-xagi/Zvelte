@@ -70,13 +70,50 @@ impl<'a> JsCodegen<'a> {
                 i += 1;
                 while i < chars.len() {
                     let sc = chars[i];
-                    out.push(sc);
                     if sc == '\\' && i + 1 < chars.len() {
+                        out.push(sc);
                         i += 1;
                         out.push(chars[i]);
                         i += 1;
                         continue;
                     }
+                    // Inside backtick template literals, format ${...} expressions recursively
+                    if quote == '`' && sc == '$' && i + 1 < chars.len() && chars[i + 1] == '{' {
+                        out.push_str("${");
+                        i += 2;
+                        let mut inner = String::new();
+                        let mut depth = 1usize;
+                        let mut in_q: Option<char> = None;
+                        let mut esc = false;
+                        while i < chars.len() {
+                            let ic = chars[i];
+                            if let Some(iq) = in_q {
+                                if esc {
+                                    esc = false;
+                                } else if ic == '\\' {
+                                    esc = true;
+                                } else if ic == iq {
+                                    in_q = None;
+                                }
+                            } else if ic == '"' || ic == '\'' || ic == '`' {
+                                in_q = Some(ic);
+                            } else if ic == '{' {
+                                depth += 1;
+                            } else if ic == '}' {
+                                depth -= 1;
+                                if depth == 0 {
+                                    i += 1;
+                                    break;
+                                }
+                            }
+                            inner.push(ic);
+                            i += 1;
+                        }
+                        out.push_str(&self.format_expr(&inner));
+                        out.push('}');
+                        continue;
+                    }
+                    out.push(sc);
                     i += 1;
                     if sc == quote {
                         break;
@@ -151,8 +188,35 @@ impl<'a> JsCodegen<'a> {
     }
 
     pub fn generate_html(&self) -> String {
-        let style_block = if !self.component.styles.is_empty() {
-            format!("  <style>\n{}\n  </style>\n", self.component.styles)
+        self.generate_html_with_css(None, &self.component.styles, None)
+    }
+
+    pub fn generate_html_with_css(
+        &self,
+        tailwind_base: Option<&str>,
+        custom_styles: &str,
+        tailwind_utilities: Option<&str>,
+    ) -> String {
+        let mut combined_css = String::new();
+        if let Some(base) = tailwind_base {
+            if !base.trim().is_empty() {
+                combined_css.push_str(base.trim());
+                combined_css.push('\n');
+            }
+        }
+        if !custom_styles.trim().is_empty() {
+            combined_css.push_str(custom_styles.trim());
+            combined_css.push('\n');
+        }
+        if let Some(utils) = tailwind_utilities {
+            if !utils.trim().is_empty() {
+                combined_css.push_str(utils.trim());
+                combined_css.push('\n');
+            }
+        }
+
+        let style_block = if !combined_css.trim().is_empty() {
+            format!("  <style>\n{}\n  </style>\n", combined_css.trim_end())
         } else {
             String::new()
         };
@@ -526,8 +590,29 @@ impl<'a> JsCodegen<'a> {
     }
 
     pub fn generate(&mut self) -> CodegenOutput {
-        let html = self.generate_html();
+        self.generate_with_tailwind(&crate::config::types::TailwindConfig::default(), None)
+            .unwrap_or_else(|_| CodegenOutput {
+                html: self.generate_html(),
+                js: self.generate_js(),
+            })
+    }
+
+    pub fn generate_with_tailwind(
+        &mut self,
+        tailwind_cfg: &crate::config::types::TailwindConfig,
+        project_dir: Option<&std::path::Path>,
+    ) -> Result<CodegenOutput, String> {
+        let tw = crate::compiler::tailwind::compile_tailwind(
+            self.component,
+            tailwind_cfg,
+            project_dir,
+        )?;
+        let html = self.generate_html_with_css(
+            Some(&tw.tailwind_base),
+            &tw.processed_custom_style,
+            Some(&tw.tailwind_utilities),
+        );
         let js = self.generate_js();
-        CodegenOutput { html, js }
+        Ok(CodegenOutput { html, js })
     }
 }

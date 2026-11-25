@@ -14,6 +14,7 @@
 | **`v0.0.4`** | **Native C-ABI Shared Library Compilation, `ctypes` Linker, Svelte Ergonomics & Port Fallback** | **✅ Released** |
 | **`v0.0.5`** | **Full Rust Core Rewrite (`std`-only), Python-First Scaffold & `examples/03-python-api`** | **✅ Released** |
 | **`v0.0.6`** | **Live Hot Reload Watcher, Scoped Reactivity Cleanup, Server Secret Isolation, Full Test Suite** | **✅ Released** |
+| **`v0.0.7`** | **Full Built-In Zero-Dependency Tailwind CSS Engine, `@apply`, Dynamic Classes & Theme Config** | **✅ Released** |
 | `v0.1.0` | Stable Core Release: Client JS State Transform, Minification, XSS Audit, Multi-Component Imports | 🎯 Next |
 
 ---
@@ -44,6 +45,11 @@
 ### Phase 5 — Cross-Platform DevServer & Live Hot Reload
 - [x] Cross-platform `std::net::TcpListener` HTTP server with automatic fallback across `port..port+9`.
 - [x] File-watcher hot reload monitoring `app.toml` and entry `.zvelte`, rebuilding `.zvelte/dev`, restarting `worker.py`, and notifying browsers via `/__zvelte_version`.
+
+### Phase 6 — Full Tailwind CSS Engine (`v0.0.7`)
+- [x] Built-in zero-dependency Rust Tailwind CSS compiler (`tailwind.rs`) with full 22-family color palette, opacity modifiers, arbitrary values, gradients, and animations.
+- [x] Stackable variant compiler (`sm:`..`2xl:`, `dark:`, `hover:`, `focus:`, `group-*`, `peer-*`, `before:`/`after:`, `!important`).
+- [x] `<style>` `@apply` directive expansion, Preflight `@layer base`, dynamic `class={...}` extraction, and `[tailwind]` configuration (plus optional external `tailwindcss` CLI mode).
 
 ---
 

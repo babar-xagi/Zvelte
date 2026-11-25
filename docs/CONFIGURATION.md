@@ -23,6 +23,12 @@ enabled = true
 executable = "python3"       # Command or path for CPython supervisor
 version = "3.10+"
 
+[tailwind]
+enabled = true
+preflight = true
+dark_mode = "media"          # Options: "media", "class"
+mode = "auto"                # Options: "auto", "builtin", "cli", "off"
+
 [dev]
 host = "127.0.0.1"
 port = 3000
@@ -76,7 +82,15 @@ source_maps = true
 | `executable` | string | `"rustc"` | Native compiler executable (`$RUSTC`, `PATH`, or `~/.cargo/bin/rustc`). |
 | `native_modules` | bool | `true` | Enables `rustc --crate-type cdylib` compilation. |
 
-### 5. `[dev]`
+### 5. `[tailwind]` / `[style]`
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Enables built-in Tailwind CSS compilation (`tailwind = true` alias in `[style]`). |
+| `preflight` | bool | `true` | Emits `@layer base` Tailwind reset when Tailwind classes/directives or `[tailwind]` are present. |
+| `dark_mode` | string | `"media"` | `"media"` (`@media (prefers-color-scheme: dark)`) or `"class"` (`.dark ...`). |
+| `mode` | string | `"auto"` | `"auto"` / `"builtin"` (built-in Rust engine), `"cli"` (runs external `tailwindcss`), or `"off"`. |
+
+### 6. `[dev]`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `host` | string | `"127.0.0.1"` | Bind IP address. |
@@ -84,7 +98,7 @@ source_maps = true
 | `hot_reload` | bool | `true` | Watches `app.toml` and entry `.zvelte` for edits, recompiles `.zvelte/dev`, restarts Python worker, and reloads connected browsers. |
 | `open_browser` | bool | `false` | Browser auto-open option flag. |
 
-### 6. `[build]`
+### 7. `[build]`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `output` / `out_dir` | string | `"dist"` | Directory where `zvelte build` writes production artifacts (`zvelte clean` removes this directory). |

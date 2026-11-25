@@ -15,8 +15,9 @@ use zvelte::compiler::js_codegen::JsCodegen;
 use zvelte::compiler::native_compiler::{
     compile_native_library, generate_ctypes_bindings, parse_exported_functions,
 };
+use zvelte::compiler::tailwind::compile_tailwind;
 use zvelte::config::toml_parser::{parse_app_toml, TomlError};
-use zvelte::config::types::{AppMode, Renderer};
+use zvelte::config::types::{AppMode, Renderer, TailwindConfig};
 use zvelte::devserver::server::DevServer;
 use zvelte::semantic::analyzer::{analyze, SemanticError};
 use zvelte::source::ast::{NodeType, ScriptContext, ScriptLang};
@@ -567,7 +568,13 @@ fn test_cli_version_help_and_unknown_command() {
 #[test]
 fn test_all_repo_examples_check_and_build() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let examples = ["01-counter", "02-todo-app", "03-python-api", "04-ai-chatbot"];
+    let examples = [
+        "01-counter",
+        "02-todo-app",
+        "03-python-api",
+        "04-ai-chatbot",
+        "05-tailwind-dashboard",
+    ];
 
     for ex in examples {
         let ex_dir = manifest_dir.join("examples").join(ex);
@@ -582,6 +589,13 @@ fn test_all_repo_examples_check_and_build() {
             .unwrap_or_else(|e| panic!("{} failed build: {}", ex, e));
         assert!(res.html_bytes > 0);
         assert!(res.js_bytes > 0);
+        if ex == "05-tailwind-dashboard" {
+            assert!(
+                res.tailwind_utilities > 30,
+                "expected 30+ compiled Tailwind utilities in 05-tailwind-dashboard, got {}",
+                res.tailwind_utilities
+            );
+        }
     }
 }
 
@@ -801,4 +815,121 @@ msg: string = "init"
     assert!(!tmp.path().join("public_out").exists());
     assert!(tmp.path().join("app.toml").exists());
     assert!(tmp.path().join("app.zvelte").exists());
+}
+
+// =========================================================================
+// 7. Full Tailwind CSS Engine & Integration Tests (v0.0.7)
+// =========================================================================
+
+#[test]
+fn test_tailwind_config_parsing() {
+    let toml = r#"
+[project]
+name = "tw-app"
+
+[tailwind]
+enabled = true
+preflight = false
+dark_mode = "class"
+mode = "builtin"
+"#;
+    let cfg = parse_app_toml(toml).expect("tailwind toml should parse");
+    assert!(cfg.tailwind.enabled);
+    assert!(!cfg.tailwind.preflight);
+    assert_eq!(cfg.tailwind.dark_mode, "class");
+    assert_eq!(cfg.tailwind.mode, "builtin");
+    assert!(cfg.tailwind.explicit);
+
+    let bad = "[tailwind]\ndark_mode = \"neon\"\n";
+    assert_eq!(
+        parse_app_toml(bad),
+        Err(TomlError::InvalidValue("neon".to_string()))
+    );
+}
+
+#[test]
+fn test_tailwind_utilities_variants_opacity_arbitrary_and_apply() {
+    let src = r#"
+<state>
+active: bool = true
+</state>
+<style>
+.custom-btn {
+    @apply px-4 py-2 rounded-lg font-semibold bg-sky-600 text-white;
+}
+</style>
+<div class="group min-h-screen w-1/2 -mt-2 flex md:grid md:grid-cols-3 gap-4 bg-[#1e293b]/80 dark:md:hover:bg-indigo-600/90 !p-6 animate-pulse [mask-type:alpha]">
+  <span class={active ? "bg-emerald-500 text-white" : "bg-rose-500/50 text-slate-200"}>Hi</span>
+  <p class={`text-sm ${active ? 'font-bold' : 'opacity-50'}`}>Template</p>
+  <i class="before:content-['*'] group-hover:opacity-100 bg-gradient-to-r from-sky-400 via-purple-500 to-indigo-600">x</i>
+</div>
+"#;
+    let comp = parse_component(src).expect("parse tailwind component");
+    let tw_cfg = TailwindConfig {
+        enabled: true,
+        preflight: true,
+        dark_mode: "class".to_string(),
+        mode: "auto".to_string(),
+        explicit: true,
+    };
+    let out = compile_tailwind(&comp, &tw_cfg, None).expect("compile tailwind");
+
+    // Preflight present
+    assert!(out.tailwind_base.contains("@layer base"));
+    // @apply expanded in custom CSS
+    assert!(out.processed_custom_style.contains("padding-left: 1rem;"));
+    assert!(out.processed_custom_style.contains("border-radius: 0.5rem;"));
+    // Spacing, negative margin, fraction width
+    assert!(out.tailwind_utilities.contains(".min-h-screen { min-height: 100vh; }"));
+    assert!(out.tailwind_utilities.contains(".w-1\\/2 { width: 50%; }"));
+    assert!(out.tailwind_utilities.contains(".-mt-2 { margin-top: -0.5rem; }"));
+    // Important modifier
+    assert!(out.tailwind_utilities.contains(".\\!p-6 { padding: 1.5rem !important; }"));
+    // Arbitrary color with opacity + arbitrary property
+    assert!(out.tailwind_utilities.contains("background-color: rgb(30 41 59 / 0.8);"));
+    assert!(out.tailwind_utilities.contains("mask-type: alpha;"));
+    // Stacked dark + md + hover + opacity
+    assert!(out.tailwind_utilities.contains("@media (min-width: 768px)"));
+    assert!(out.tailwind_utilities.contains(".dark .dark\\:md\\:hover\\:bg-indigo-600\\/90:hover { background-color: rgb(79 70 229 / 0.9); }"));
+    // Group hover & before::
+    assert!(out.tailwind_utilities.contains(".group:hover .group-hover\\:opacity-100"));
+    // Dynamic expression + backtick template classes extracted
+    assert!(out.tailwind_utilities.contains(".bg-emerald-500"));
+    assert!(out.tailwind_utilities.contains(".bg-rose-500\\/50"));
+    assert!(out.tailwind_utilities.contains(".font-bold"));
+    assert!(out.tailwind_utilities.contains(".opacity-50 { opacity: 0.5; }"));
+    // Gradients preserving via- and to-
+    assert!(out.tailwind_utilities.contains("--tw-gradient-from: rgb(56 189 248);"));
+    assert!(out.tailwind_utilities.contains("--tw-gradient-stops: var(--tw-gradient-from), rgb(168 85 247), var(--tw-gradient-to"));
+    assert!(out.tailwind_utilities.contains(".to-indigo-600 { --tw-gradient-to: rgb(79 70 229); }"));
+    // Keyframes emitted for animate-pulse
+    assert!(out.tailwind_utilities.contains("@keyframes pulse"));
+}
+
+#[test]
+fn test_tailwind_zero_overhead_when_unused_and_backtick_template_expr() {
+    let src = r#"
+<state>
+flag: bool = true
+</state>
+<button class={`custom ${flag ? 'bg-sky-500' : 'bg-slate-800'}`}>Go</button>
+"#;
+    let comp = parse_component(src).unwrap();
+    let mut codegen = JsCodegen::new(&comp, "tw-dyn");
+    let out = codegen.generate();
+    assert!(
+        out.js.contains("${state.flag ? 'bg-sky-500' : 'bg-slate-800'}"),
+        "backtick template expr inside class={{...}} should format state.flag, got:\n{}",
+        out.js
+    );
+    assert!(out.html.contains(".bg-sky-500"));
+    assert!(out.html.contains(".bg-slate-800"));
+
+    // Non-tailwind component without explicit [tailwind] must NOT inject preflight overhead
+    let plain_src = r#"<div class="my-custom-box">Hello</div>"#;
+    let plain_comp = parse_component(plain_src).unwrap();
+    let tw_out = compile_tailwind(&plain_comp, &TailwindConfig::default(), None).unwrap();
+    assert_eq!(tw_out.utility_count, 0);
+    assert!(tw_out.tailwind_base.is_empty());
+    assert!(tw_out.tailwind_utilities.is_empty());
 }

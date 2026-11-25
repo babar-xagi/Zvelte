@@ -119,6 +119,20 @@ Supported events: `click`, `input`, `change`, `submit`, `keydown`, `keyup`:
 
 ---
 
-## 🎨 4. Styles (`<style>`)
+## 🎨 4. Styles & Full Tailwind CSS (`<style>` & Utility Classes)
 
-CSS declared inside `<style>...</style>` is injected into the generated HTML `<head>`.
+CSS declared inside `<style>...</style>` is injected into the generated HTML `<head>`. In addition, **Zvelte (`v0.0.7+`) includes a full zero-dependency Tailwind CSS compiler**:
+
+- **Utility Classes Directly in HTML:** Write `class="flex items-center justify-between p-6 bg-slate-900 text-sky-400 rounded-xl shadow-lg"` with zero `npm` or `node_modules`.
+- **Full Variants & Breakpoints:** Stack modifiers freely — `dark:md:hover:bg-indigo-600/90`, `focus:ring-2`, `group-hover:opacity-100`, `peer-checked:bg-emerald-500`, `before:content-['*']`, `!p-4`.
+- **Arbitrary Values & Colors:** `w-[320px]`, `bg-[#1e293b]/80`, `z-[100]`, `[mask-type:alpha]`.
+- **Dynamic Reactive Classes:** Classes inside ternary expressions (`class={open ? "block bg-emerald-500" : "hidden"}`) and backtick templates (`` class={`p-4 ${dark ? 'bg-slate-950' : 'bg-white'}`} ``) are automatically extracted and compiled.
+- **CSS `@apply` & Directives inside `<style>`:**
+  ```html
+  <style>
+  .pill-badge {
+      @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400;
+  }
+  </style>
+  ```
+- **Zero Overhead When Unused:** If a component uses only custom CSS classes and does not explicitly configure `[tailwind]` in `app.toml`, no Tailwind Preflight or extra CSS is injected.

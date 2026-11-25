@@ -12,6 +12,7 @@ pub struct BuildResult {
     pub js_bytes: usize,
     pub worker_bytes: usize,
     pub native_bytes: usize,
+    pub tailwind_utilities: usize,
 }
 
 pub fn generate_python_worker(user_code: &str, ctypes_code: &str) -> String {
@@ -101,9 +102,11 @@ pub fn build_project(project_dir: &Path, output_dir_name: &str) -> Result<BuildR
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| format!("failed to create output dir {:?}: {}", out_dir, e))?;
 
-    // 6. Generate HTML and JS
+    // 6. Generate HTML (with integrated Tailwind CSS compiler) and JS
+    let tw_count = crate::compiler::tailwind::compile_tailwind(&comp, &config.tailwind, Some(project_dir))?
+        .utility_count;
     let mut js_gen = JsCodegen::new(&comp, &config.project.name);
-    let codegen_out = js_gen.generate();
+    let codegen_out = js_gen.generate_with_tailwind(&config.tailwind, Some(project_dir))?;
 
     let html_path = out_dir.join("index.html");
     std::fs::write(&html_path, &codegen_out.html)
@@ -158,5 +161,6 @@ pub fn build_project(project_dir: &Path, output_dir_name: &str) -> Result<BuildR
         js_bytes: codegen_out.js.len(),
         worker_bytes,
         native_bytes,
+        tailwind_utilities: tw_count,
     })
 }

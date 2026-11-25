@@ -21,7 +21,7 @@ zvelte <command> [path]
 | `zvelte build` | `[path]` | Compiles production assets into `[build] output` (default: `dist/`). |
 | `zvelte dev` | `[path]` | Starts the Rust HTTP dev server with port fallback, hot reload watching, and CPython RPC supervisor. |
 | `zvelte clean` | `[path]` | Removes configured build output, cache (`.zvelte/`), and legacy `.rustby/` while preserving source files. |
-| `zvelte --version` | None | Prints `zvelte version 0.0.6`. |
+| `zvelte --version` | None | Prints `zvelte version 0.0.7`. |
 | `zvelte --help` | None | Displays usage help. |
 
 ---
@@ -40,7 +40,7 @@ Scaffolds a workspace conforming strictly to the **Two-File Contract**:
 
 ### `zvelte build [path]`
 Writes production artifacts to `[build] output` (default `dist/`):
-- `index.html`: HTML5 shell with injected `<style>` CSS (no dev reload script).
+- `index.html`: HTML5 shell with injected `<style>` CSS (including Tailwind Preflight + utilities when used; no dev reload script).
 - `app.js`: Scoped fine-grained DOM runtime and `POST /api/rpc` client proxies.
 - `worker.py`: Standalone CPython stdio JSON-RPC worker (emitted when Python server or native Rust scripts exist).
 - `libnative.so` / `libnative.dylib` / `native.dll`: Compiled shared library (emitted only when `<script lang="rust">` is used in `hybrid`/`rust` mode).

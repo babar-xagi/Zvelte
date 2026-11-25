@@ -61,6 +61,9 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
         // Section header
         if line.starts_with('[') && line.ends_with(']') {
             current_section = line[1..line.len() - 1].trim().to_string();
+            if current_section == "tailwind" || current_section == "style" {
+                config.tailwind.explicit = true;
+            }
             continue;
         }
 
@@ -139,6 +142,31 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
                     "optimization" => config.build.optimization = val_unquoted.to_string(),
                     "minify" => config.build.minify = val_unquoted == "true",
                     "source_maps" => config.build.source_maps = val_unquoted == "true",
+                    _ => {}
+                },
+                "tailwind" | "style" => match key {
+                    "enabled" | "tailwind" => {
+                        config.tailwind.enabled = val_unquoted == "true";
+                        config.tailwind.explicit = true;
+                    }
+                    "preflight" => config.tailwind.preflight = val_unquoted == "true",
+                    "dark_mode" | "darkMode" => {
+                        if matches!(val_unquoted, "media" | "class") {
+                            config.tailwind.dark_mode = val_unquoted.to_string();
+                        } else {
+                            return Err(TomlError::InvalidValue(val_unquoted.to_string()));
+                        }
+                    }
+                    "mode" => {
+                        if matches!(val_unquoted, "auto" | "builtin" | "cli" | "off") {
+                            config.tailwind.mode = val_unquoted.to_string();
+                            if val_unquoted == "off" {
+                                config.tailwind.enabled = false;
+                            }
+                        } else {
+                            return Err(TomlError::InvalidValue(val_unquoted.to_string()));
+                        }
+                    }
                     _ => {}
                 },
                 _ => {}

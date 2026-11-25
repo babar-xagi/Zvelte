@@ -105,6 +105,27 @@ pub struct BuildConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TailwindConfig {
+    pub enabled: bool,
+    pub preflight: bool,
+    pub dark_mode: String, // "media" or "class"
+    pub mode: String,      // "auto", "builtin", or "cli"
+    pub explicit: bool,    // true if [tailwind] section present in app.toml
+}
+
+impl Default for TailwindConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            preflight: true,
+            dark_mode: "media".to_string(),
+            mode: "auto".to_string(),
+            explicit: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub project: ProjectConfig,
     pub app: AppSection,
@@ -113,6 +134,7 @@ pub struct AppConfig {
     pub rust: RustConfig,
     pub dev: DevConfig,
     pub build: BuildConfig,
+    pub tailwind: TailwindConfig,
 }
 
 impl Default for AppConfig {
@@ -158,6 +180,7 @@ impl Default for AppConfig {
                 minify: false,
                 source_maps: true,
             },
+            tailwind: TailwindConfig::default(),
         }
     }
 }

@@ -23,6 +23,7 @@ flowchart TD
         PAR["SFC Parser (parser.rs)"]
         SEM["Semantic Analyzer (analyzer.rs)"]
         JSGEN["Scoped DOM & RPC Codegen (js_codegen.rs)"]
+        TW["Tailwind CSS Compiler (tailwind.rs)"]
         PYGEN["Python Worker Gen (codegen.rs)"]
         NAT["Optional Rust C-ABI Compiler (native_compiler.rs)"]
     end
@@ -35,7 +36,7 @@ flowchart TD
 
     TOML --> CFG --> SEM
     SFC --> PAR --> SEM
-    SEM --> JSGEN
+    SEM --> TW --> JSGEN
     SEM --> PYGEN
     SEM --> NAT
     NAT -. ctypes .-> PY

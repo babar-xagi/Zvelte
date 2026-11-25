@@ -1,0 +1,30 @@
+[project]
+name = "tailwind-dashboard"
+version = "0.1.0"
+entry = "app.zvelte"
+
+[app]
+target = "web"
+mode = "python"
+renderer = "js"
+strict = true
+
+[python]
+enabled = true
+executable = "python3"
+version = "3.10+"
+
+[tailwind]
+enabled = true
+preflight = true
+dark_mode = "class"
+mode = "auto"
+
+[dev]
+host = "127.0.0.1"
+port = 3005
+hot_reload = true
+
+[build]
+output = "dist"
+cache = ".zvelte"

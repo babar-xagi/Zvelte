@@ -36,6 +36,12 @@ enabled = true
 executable = "python3"
 version = "3.10+"
 
+[tailwind]
+enabled = true
+preflight = true
+dark_mode = "media"
+mode = "auto"
+
 [dev]
 host = "127.0.0.1"
 port = 3000
