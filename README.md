@@ -7,7 +7,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Language-Python%203.10+-blue.svg)](https://www.python.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20%2B%20UnoCSS-38bdf8.svg)](https://unocss.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Release: v0.0.8](https://img.shields.io/badge/Release-v0.0.8-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.8)
+[![Release: v0.0.9](https://img.shields.io/badge/Release-v0.0.9-brightgreen.svg)](https://github.com/babar-xagi/Zvelte/releases/tag/v0.0.9)
 
 ---
 
@@ -15,8 +15,9 @@
 
 - 🐍 **Developed for Python:** Write Python backend functions, AI pipelines, database queries, and data processing directly inside your component (`<script lang="python">`).
 - 🎨 **Full Built-In Tailwind CSS & UnoCSS (Zero Node.js):** Use standard Tailwind utility classes OR full UnoCSS workflows — **Attributify Mode** (`<div flex items-center bg="slate-900 hover:slate-800" p="x-4 y-2">`), **Nested Variant Groups** (`hover:(bg-sky-500 text-white)`), **`[unocss.shortcuts]`** in `app.toml`, preset-uno shorthands (`c-*`, `op-*`, `fw-*`, `rd*`, `pa-*`, `lt-md:*`, `hocus:*`, `p-6!`), and CSS `--at-apply:` / `@screen` / `theme()` — compiled in milliseconds purely by Rust with zero `npm` or `node_modules`.
-- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for sub-5ms builds, ~672 KB release binaries, and memory safety.
-- 🎯 **Fine-Grained Reactivity:** Zero Virtual DOM overhead. Scoped reactive subscriptions directly update affected DOM text cells, attributes, conditionals (`{#if}`), and keyed loops (`{#each}`).
+- ⚡ **Powered by Rust:** The compiler, parser, bundler, and development server are written 100% in Rust (`std`-only) for ~3–5ms builds, ~699 KB release binaries, and memory safety.
+- 🎯 **Svelte-Style Fine-Grained Reactivity:** Zero Virtual DOM overhead. Supports `$:` reactive derived declarations, client `<script>` state compilation, `on:event|preventDefault` / `onclick` / `click` handlers, `{#if}` / `{:else if}`, `{#each items as item, idx}`, and two-way bindings (`bind:value` / `bind:checked`) with hierarchical scope cleanup (`__clear_scope`).
+- 🐍 **Async Python RPC Bridge:** Call `def` and `async def` Python functions directly inside reactive markup (`{fn(...)}`) or events (`click={res = py_fn()}`), automatically awaited in client JS and executed inside CPython `worker.py`.
 - 🔥 **Live Hot Reload Dev Server:** Built-in HTTP server (`zvelte dev`) with automatic port fallback, `hot_reload` file watching for `app.toml` and `.zvelte`, and supervised CPython worker restarts.
 - 📁 **Deterministic Two-File Scaffold:** `zvelte new my-app` generates **strictly** `app.toml` and `app.zvelte`. Zero configuration noise, no `package.json`, no webpack, no `node_modules`.
 - 🛡️ **Secure by Design:** Only safe JSON-compatible literals auto-sync to client reactive state; Python environment lookups (`os.getenv(...)`), API keys, and server secrets remain strictly inside the Python worker process.
@@ -82,7 +83,7 @@ is_loading: bool = false
 - ⚙️ **[Configuration Reference](docs/CONFIGURATION.md):** Complete `app.toml` reference.
 - 🛠️ **[CLI Reference Manual](docs/CLI_REFERENCE.md):** `new`, `check`, `build`, `dev`, and `clean`.
 - ⚡ **[Benchmarks](docs/BENCHMARKS.md)** & **[Zig vs Rust Comparison](comparison.md):** Measured timings and binary sizes.
-- 🗺️ **[Roadmap](ROADMAP.md)** & **[Changelog](CHANGELOG.md):** Milestones and release notes.
+- 🗺️ **[Roadmap](ROADMAP.md)** & **[Changelog](CHANGELOG.md):** What's done, what's remaining (`v0.1.0+`), and release notes.
 
 ---
 

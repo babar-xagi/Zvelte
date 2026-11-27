@@ -4,7 +4,7 @@ version = "0.1.0"
 entry = "app.zvelte"
 
 [app]
-mode = "hybrid"
+mode = "python"
 renderer = "js"
 
 [dev]

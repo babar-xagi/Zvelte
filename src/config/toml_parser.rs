@@ -115,6 +115,7 @@ pub fn parse_app_toml(source: &str) -> Result<AppConfig, TomlError> {
                     "enabled" => config.python.enabled = val_unquoted == "true",
                     "executable" => config.python.executable = val_unquoted.to_string(),
                     "execution" => config.python.execution = val_unquoted.to_string(),
+                    "version" => config.toolchain.python = val_unquoted.to_string(),
                     "rust_acceleration" | "zig_acceleration" => {
                         config.python.rust_acceleration = val_unquoted == "true"
                     }

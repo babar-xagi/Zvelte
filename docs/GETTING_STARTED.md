@@ -24,7 +24,7 @@
 
 ## 🛠️ Step 1: Build & Install Zvelte
 
-Clone the repository and compile the zero-dependency Rust release binary (`~672 KB`, includes built-in Tailwind CSS & UnoCSS compilers):
+Clone the repository and compile the zero-dependency Rust release binary (`~699 KB`, includes built-in Tailwind CSS & UnoCSS compilers):
 
 ```bash
 # 1. Clone the repository
@@ -47,7 +47,7 @@ zvelte --version
 
 Expected output:
 ```text
-zvelte version 0.0.8
+zvelte version 0.0.9
 ```
 
 ---

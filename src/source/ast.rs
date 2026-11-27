@@ -71,6 +71,13 @@ pub struct StateVar {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DerivedVar {
+    pub name: String,
+    pub expression: String,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute {
     pub name: String,
     pub value: String,
@@ -80,6 +87,7 @@ pub struct Attribute {
 pub struct EventBinding {
     pub event_name: String,
     pub expression: String,
+    pub modifiers: Vec<String>,
     pub line: usize,
 }
 
@@ -112,6 +120,7 @@ pub struct Node {
     pub alternate: Vec<Node>,
     pub collection: Option<String>,
     pub item_name: Option<String>,
+    pub index_name: Option<String>,
     pub key_name: Option<String>,
     pub content: String,
     pub line: usize,
@@ -131,6 +140,7 @@ impl Default for Node {
             alternate: Vec::new(),
             collection: None,
             item_name: None,
+            index_name: None,
             key_name: None,
             content: String::new(),
             line: 1,
@@ -142,6 +152,7 @@ impl Default for Node {
 pub struct Component {
     pub scripts: Vec<ScriptBlock>,
     pub states: Vec<StateVar>,
+    pub derived: Vec<DerivedVar>,
     pub root_nodes: Vec<Node>,
     pub styles: String,
 }

@@ -22,6 +22,8 @@ pub fn generate_python_worker(user_code: &str, ctypes_code: &str) -> String {
 import sys
 import json
 import traceback
+import asyncio
+import inspect
 
 {}
 
@@ -44,6 +46,8 @@ def handle_rpc(payload):
             res = func(**params)
         else:
             res = func(params)
+        if inspect.iscoroutine(res):
+            res = asyncio.run(res)
         return {{"result": res}}
     except Exception as e:
         return {{"error": str(e), "traceback": traceback.format_exc()}}
@@ -111,7 +115,10 @@ pub fn build_project(project_dir: &Path, output_dir_name: &str) -> Result<BuildR
         Some(project_dir),
     )?;
     let mut js_gen = JsCodegen::new(&comp, &config.project.name);
-    let codegen_out = js_gen.generate_with_prebuilt_styles(&styles, &config.unocss);
+    let mut codegen_out = js_gen.generate_with_prebuilt_styles(&styles, &config.unocss);
+    if config.build.minify {
+        codegen_out = JsCodegen::minify_output(codegen_out);
+    }
 
     let html_path = out_dir.join("index.html");
     std::fs::write(&html_path, &codegen_out.html)

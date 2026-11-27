@@ -1102,3 +1102,166 @@ active: bool = true
     assert!(!out.html.contains("[type~=\"text\"]"));
     assert!(!out.html.contains("[placeholder~="));
 }
+
+// =========================================================================
+// 9. Svelte-Parity Reactivity, Directives & Python Async RPC Tests
+// =========================================================================
+
+#[test]
+fn test_svelte_reactivity_derived_events_else_if_and_each_index() {
+    let src = r#"
+<script>
+let count = 1;
+let items = ["alpha", "beta"];
+$: doubled = count * 2;
+$: label = doubled > 4 ? "high" : "low";
+function increment(step = 1) {
+    count += step;
+}
+const resetCount = () => {
+    count = 0;
+};
+function logEvent(e) {
+    count += e ? 1 : 0;
+}
+</script>
+
+<style lang="css">
+.title { color: #38bdf8; }
+</style>
+<style>
+.sub { color: #94a3b8; }
+</style>
+
+<main>
+  <h1 class="title">{label}: {doubled}</h1>
+  <button on:click={increment}>+1</button>
+  <button on:click={logEvent}>Event</button>
+  <button onclick={() => increment(3)}>+3</button>
+  <button on:click|once={resetCount}>Reset</button>
+  <form on:submit|preventDefault={increment(2)}>
+    <button type="submit">Go</button>
+  </form>
+  {#if count > 5}
+    <p>gt5</p>
+  {:else if count > 2}
+    <p>gt2</p>
+  {:else}
+    <p>le2</p>
+  {/if}
+  {#each items as item, idx (item)}
+    <span>{idx}:{item}</span>
+  {/each}
+</main>
+"#;
+    let comp = parse_component(src).expect("parse svelte component");
+    assert_eq!(comp.derived.len(), 2);
+    assert_eq!(comp.derived[0].name, "doubled");
+    assert!(comp.styles.contains(".title") && comp.styles.contains(".sub"));
+
+    let cfg = parse_app_toml("[app]\nmode = \"python\"\n").unwrap();
+    let sem = analyze(comp.clone(), &cfg).expect("semantic validation passes");
+    assert!(sem.state_names.contains_key("doubled"));
+    assert!(sem.func_names.contains("increment"));
+    assert!(sem.func_names.contains("resetCount"));
+
+    let mut codegen = JsCodegen::new(&comp, "svelte-parity");
+    let out = codegen.generate();
+
+    // Derived recalculation emitted inside __recompute_derived + update()
+    assert!(out.js.contains("state.doubled = state.count * 2;"));
+    assert!(out.js.contains("state.label = state.doubled > 4 ? \"high\" : \"low\";"));
+    assert!(out.js.contains("__recompute_derived();"));
+
+    // Client <script> state rewrites + update call inside increment/resetCount
+    assert!(out.js.contains("state.count += step;"));
+    assert!(out.js.contains("if (typeof update === \"function\") update();"));
+
+    // Event bindings: bare fn (with default vs explicit param), arrow fn, modifiers, and once option
+    assert!(out.js.contains("addEventListener(\"click\", function(event) { increment(); update(); })"));
+    assert!(out.js.contains("addEventListener(\"click\", function(event) { logEvent(event); update(); })"));
+    assert!(out.js.contains("(() => increment(3))(event); update();"));
+    assert!(out.js.contains("{ once: true }"));
+    assert!(out.js.contains("event.preventDefault();"));
+
+    // {:else if} + {#each items as item, idx} loop vars must NOT be prefixed with state.
+    assert!(out.js.contains("const item = __list[__idx];"));
+    assert!(out.js.contains("const idx = __idx;"));
+    assert!(out.js.contains("__setNodeText(") && out.js.contains(", idx);"));
+    assert!(out.js.contains(", item);"));
+    assert!(!out.js.contains("state.item)") && !out.js.contains("state.item."));
+    assert!(!out.js.contains("state.idx"));
+
+    // Semantic check catches unknown template expression `{unknown_var}`
+    let bad = parse_component("<state>\nx: i32 = 1\n</state>\n<p>{unknown_var}</p>").unwrap();
+    assert_eq!(
+        analyze(bad, &cfg).unwrap_err(),
+        SemanticError::UnknownStateInExpression("unknown_var".to_string())
+    );
+}
+
+#[test]
+fn test_python_async_def_worker_and_event_await_and_minify() {
+    // 1. Live Python `async def` coroutine worker execution
+    let worker = generate_python_worker(
+        "async def async_echo(name):\n    return f'Async {name}'\n",
+        "",
+    );
+    let tmp = TempDir::new("async_py");
+    let worker_path = tmp.path().join("worker.py");
+    fs::write(&worker_path, &worker).unwrap();
+
+    let mut child = Command::new("python3")
+        .arg("-u")
+        .arg(&worker_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn python3");
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        stdin
+            .write_all(br#"{"jsonrpc":"2.0","id":11,"method":"async_echo","params":["Svelte"]}"#)
+            .unwrap();
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+    }
+    let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    std::io::BufRead::read_line(&mut stdout, &mut line).unwrap();
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(line.contains(r#""result": "Async Svelte""#), "got: {}", line);
+
+    // 2. JS event assignment automatically awaits direct RPC call while keeping .then() intact
+    let src = r#"
+<script lang="python">
+def fetch_msg(q): return q
+def chain_msg(q): return q
+</script>
+<state>
+res: string = ""
+</state>
+<button click={res = fetch_msg("hi")}>Direct</button>
+<button click={chain_msg("hi").then(r => { res = r; update(); })}>Chained</button>
+"#;
+    let comp = parse_component(src).unwrap();
+    let mut codegen = JsCodegen::new(&comp, "rpc-await");
+    let out = codegen.generate();
+    assert!(
+        out.js.contains("async function(event) { state.res = await fetch_msg(\"hi\"); update(); }"),
+        "expected awaited RPC handler, got:\n{}",
+        out.js
+    );
+    assert!(
+        out.js.contains("chain_msg(\"hi\").then("),
+        "expected chained .then() preserved without await, got:\n{}",
+        out.js
+    );
+
+    // 3. Minify flag shrinks built output cleanly
+    let min = JsCodegen::minify_output(out.clone());
+    assert!(min.html.len() < out.html.len());
+    assert!(min.js.len() < out.js.len());
+    assert!(min.js.contains("await fetch_msg(\"hi\")"));
+}

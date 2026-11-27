@@ -57,9 +57,9 @@ The parser in [`src/source/parser.rs`](../src/source/parser.rs) splits the compo
 | Python Server Script | `<script lang="python">` / `context="server"` | Raw Python extraction up to `</script>`; safe JSON/JS literals extracted to reactive `state` | `worker.py` + RPC client stubs |
 | Client JS Script | `<script>` / `lang="js"` | Raw JavaScript extraction; top-level literal vars extracted to reactive `state` | Inlined inside `app.js` |
 | Optional Native Rust | `<script lang="rust">` | Raw Rust extraction (`extern "C" fn`) in `hybrid`/`rust` mode | `libnative.so` / `native.dll` + `ctypes` |
-| Explicit State | `<state>` | Typed declarations (`count: i32 = 0`) | `const state = { ... }` |
-| Template & Directives | Markup, `{expr}`, `click={...}`, `bind:value`, `{#if}`, `{#each}` | Recursive element/block AST + quote-aware `{}` scanner + `<!-- -->` comment skipping | Fine-grained DOM instructions |
-| Styles | `<style>` | Raw CSS extraction + `@apply`/`--at-apply:`, `@screen`, `theme()`, `@tailwind`/`@unocss` directives | Unified Preflight + custom + utility/attributify `<style>` inside `index.html` |
+| Explicit State | `<state>` / `$:` | Typed declarations (`count: i32 = 0`) & Svelte `$: derived = expr` | `const state = { ... }` + `__recompute_derived()` |
+| Template & Directives | Markup, `{expr}`, `on:click`, `{#if}`/`{:else if}`, `{#each item, idx}`, `bind:value` | Recursive element/block AST + quote-aware `{}` scanner + `<!-- -->` comment skipping | Scoped fine-grained DOM updates & async/await RPC |
+| Styles | `<style ...>` | Multi-block `<style>` extraction + `@apply`/`--at-apply:`, `@screen`, `theme()`, `@tailwind`/`@unocss` | Unified Preflight + custom + utility/attributify `<style>` inside `index.html` |
 
 ### Server Secret Isolation
 `extract_script_state_variables` strictly filters top-level assignments through `normalize_safe_literal`:
@@ -87,7 +87,8 @@ Implemented in [`src/devserver/server.rs`](../src/devserver/server.rs):
 
 ---
 
-## 📁 4. Current Scope Boundaries
+## 📁 4. Current Scope Boundaries (See [ROADMAP.md](../ROADMAP.md))
 
-- **WebAssembly Backend (`renderer = "wasm"` / `context="wasm"`):** Present in config/AST enums for future compatibility (`ROADMAP.md` v0.1.0), not yet wired to a `wasm32` emitter. Always use `renderer = "js"` (the default) for active builds.
-- **Standalone Client `<script>` Functions:** Reactive rewrites apply to template interpolations, bindings, and inline event handlers; mutating a variable inside a separate `<script>` helper function does not yet trigger `state` updates automatically.
+- **Multi-File Components:** Single-component `.zvelte` entry files work today; importing child `.zvelte` components (`import Card from './Card.zvelte'`), props, and `<slot />` are next on the `v0.1.0` roadmap.
+- **WebAssembly Backend (`renderer = "wasm"` / `context="wasm"`):** Parsed in config/AST enums for forward compatibility (`ROADMAP.md` `v0.2.0`), not yet wired to a `wasm32` emitter. Use `renderer = "js"` (the default) for active builds.
+- **Python Streaming & Scoped CSS:** RPC requests return single JSON responses (`asyncio.run` supported for `async def`); token streaming via SSE and component CSS scoping are planned on `ROADMAP.md`.

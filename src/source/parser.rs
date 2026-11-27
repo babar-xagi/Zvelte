@@ -127,6 +127,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Component, ParseError> {
         let mut scripts = Vec::new();
         let mut states = Vec::new();
+        let mut derived = Vec::new();
         let mut root_nodes = Vec::new();
         let mut styles = String::new();
 
@@ -144,8 +145,14 @@ impl<'a> Parser<'a> {
             } else if self.starts_with("<state>") {
                 let parsed_states = self.parse_state_block()?;
                 states.extend(parsed_states);
-            } else if self.starts_with("<style>") {
-                styles = self.parse_style_block()?;
+            } else if self.starts_with("<style>") || self.starts_with("<style ") {
+                let parsed_style = self.parse_style_block()?;
+                if !parsed_style.is_empty() {
+                    if !styles.is_empty() {
+                        styles.push('\n');
+                    }
+                    styles.push_str(&parsed_style);
+                }
             } else if self.starts_with("{#if") {
                 let node = self.parse_if_block()?;
                 root_nodes.push(node);
@@ -171,14 +178,15 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Auto-extract top-level script variables into reactive state (Svelte-style!)
+        // Auto-extract top-level script variables & `$:` derived expressions into reactive state (Svelte-style!)
         for script in &scripts {
-            Self::extract_script_state_variables(&mut states, script);
+            Self::extract_script_declarations(&mut states, &mut derived, script);
         }
 
         Ok(Component {
             scripts,
             states,
+            derived,
             root_nodes,
             styles,
         })
@@ -436,8 +444,76 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn extract_script_state_variables(states: &mut Vec<StateVar>, script: &ScriptBlock) {
-        for raw_line in script.code.lines() {
+    fn is_valid_ident(name: &str) -> bool {
+        if name.is_empty() {
+            return false;
+        }
+        name.chars().enumerate().all(|(i, c)| {
+            if i == 0 {
+                c.is_alphabetic() || c == '_'
+            } else {
+                c.is_alphanumeric() || c == '_'
+            }
+        })
+    }
+
+    fn normalize_event_attr(attr_name: &str) -> Option<(String, Vec<String>)> {
+        let mut parts = attr_name.split('|');
+        let base_raw = parts.next()?;
+        let modifiers: Vec<String> = parts
+            .filter(|m| !m.is_empty())
+            .map(|m| m.to_string())
+            .collect();
+
+        let base = if let Some(rest) = base_raw.strip_prefix("on:") {
+            rest
+        } else if let Some(rest) = base_raw.strip_prefix("on") {
+            if matches!(
+                rest,
+                "click"
+                    | "input"
+                    | "change"
+                    | "submit"
+                    | "keydown"
+                    | "keyup"
+                    | "focus"
+                    | "blur"
+                    | "mouseenter"
+                    | "mouseleave"
+            ) {
+                rest
+            } else {
+                return None;
+            }
+        } else {
+            base_raw
+        };
+
+        if matches!(
+            base,
+            "click"
+                | "input"
+                | "change"
+                | "submit"
+                | "keydown"
+                | "keyup"
+                | "focus"
+                | "blur"
+                | "mouseenter"
+                | "mouseleave"
+        ) {
+            Some((base.to_string(), modifiers))
+        } else {
+            None
+        }
+    }
+
+    fn extract_script_declarations(
+        states: &mut Vec<StateVar>,
+        derived: &mut Vec<DerivedVar>,
+        script: &ScriptBlock,
+    ) {
+        for (line_offset, raw_line) in script.code.lines().enumerate() {
             if raw_line.is_empty() || raw_line.starts_with(' ') || raw_line.starts_with('\t') {
                 continue;
             }
@@ -458,6 +534,38 @@ impl<'a> Parser<'a> {
                 || line.starts_with("extern ")
             {
                 continue;
+            }
+
+            // Support Svelte reactive derived assignments: `$: doubled = count * 2;`
+            if script.lang == ScriptLang::Js {
+                if let Some(after_label) = line.strip_prefix("$:") {
+                    let clean_stmt = after_label.trim().trim_end_matches(';').trim();
+                    if let Some(eq_idx) = clean_stmt.find('=') {
+                        let prev = eq_idx
+                            .checked_sub(1)
+                            .and_then(|idx| clean_stmt.as_bytes().get(idx).copied())
+                            .map(|b| b as char);
+                        let next = clean_stmt.as_bytes().get(eq_idx + 1).copied().map(|b| b as char);
+                        if !prev.is_some_and(|p| matches!(p, '=' | '+' | '-' | '*' | '/' | '<' | '>' | '!'))
+                            && next != Some('=')
+                        {
+                            let lhs = clean_stmt[..eq_idx].trim();
+                            let rhs = clean_stmt[eq_idx + 1..].trim();
+                            if Self::is_valid_ident(lhs) && !rhs.is_empty() {
+                                if let Some(existing) = derived.iter_mut().find(|d| d.name == lhs) {
+                                    existing.expression = rhs.to_string();
+                                } else {
+                                    derived.push(DerivedVar {
+                                        name: lhs.to_string(),
+                                        expression: rhs.to_string(),
+                                        line: script.line + line_offset,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
             }
 
             let mut clean_line = line;
@@ -504,26 +612,11 @@ impl<'a> Parser<'a> {
                 raw_lhs = raw_lhs[..colon_idx].trim();
             }
 
-            if raw_lhs.is_empty() {
-                continue;
-            }
-            let mut is_valid = true;
-            for (i, c) in raw_lhs.chars().enumerate() {
-                if i == 0 {
-                    if !c.is_alphabetic() && c != '_' {
-                        is_valid = false;
-                        break;
-                    }
-                } else if !c.is_alphanumeric() && c != '_' {
-                    is_valid = false;
-                    break;
-                }
-            }
-            if !is_valid {
+            if !Self::is_valid_ident(raw_lhs) {
                 continue;
             }
 
-            // Strictly auto-extract ONLY safe JSON/JS literals for server/native scripts
+            // Strictly auto-extract ONLY safe JSON/JS literals for server/native/client scripts
             // (so Python runtime expressions like os.getenv(...) NEVER leak or crash browser JS!)
             let (initial_val, type_name) = match Self::normalize_safe_literal(raw_rhs) {
                 Some(pair) => pair,
@@ -582,7 +675,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_style_block(&mut self) -> Result<String, ParseError> {
-        self.consume_prefix("<style>");
+        self.consume_prefix("<style");
+        while let Some(c) = self.peek() {
+            if c == '>' {
+                self.advance();
+                break;
+            }
+            self.advance();
+        }
         let mut styles = String::new();
 
         while self.pos < self.chars.len() {
@@ -648,10 +748,11 @@ impl<'a> Parser<'a> {
                             variable: expr,
                             line: start_line,
                         });
-                    } else if matches!(attr_name.as_str(), "click" | "input" | "change" | "submit" | "keydown" | "keyup") {
+                    } else if let Some((event_name, modifiers)) = Self::normalize_event_attr(&attr_name) {
                         events.push(EventBinding {
-                            event_name: attr_name,
+                            event_name,
                             expression: expr,
+                            modifiers,
                             line: start_line,
                         });
                     } else {
@@ -690,7 +791,23 @@ impl<'a> Parser<'a> {
         } else if self.peek() == Some('>') {
             self.advance();
             // Standard HTML void elements
-            matches!(tag.as_str(), "input" | "img" | "br" | "hr" | "meta" | "link")
+            matches!(
+                tag.as_str(),
+                "input"
+                    | "img"
+                    | "br"
+                    | "hr"
+                    | "meta"
+                    | "link"
+                    | "source"
+                    | "track"
+                    | "wbr"
+                    | "col"
+                    | "embed"
+                    | "param"
+                    | "area"
+                    | "base"
+            )
         } else {
             false
         };
@@ -818,6 +935,10 @@ impl<'a> Parser<'a> {
     fn parse_if_block(&mut self) -> Result<Node, ParseError> {
         let start_line = self.line;
         self.consume_prefix("{#if");
+        self.parse_if_branch(start_line)
+    }
+
+    fn parse_if_branch(&mut self, start_line: usize) -> Result<Node, ParseError> {
         self.skip_whitespace();
 
         let mut condition = String::new();
@@ -837,6 +958,22 @@ impl<'a> Parser<'a> {
         while self.pos < self.chars.len() {
             if self.starts_with("{/if}") {
                 self.consume_prefix("{/if}");
+                return Ok(Node {
+                    node_type: NodeType::IfBlock,
+                    condition: Some(condition.trim().to_string()),
+                    consequent,
+                    alternate,
+                    line: start_line,
+                    ..Default::default()
+                });
+            } else if self.starts_with("{:else if") {
+                if in_else {
+                    return Err(ParseError::UnterminatedIfBlock);
+                }
+                let branch_line = self.line;
+                self.consume_prefix("{:else if");
+                let nested_if = self.parse_if_branch(branch_line)?;
+                alternate.push(nested_if);
                 return Ok(Node {
                     node_type: NodeType::IfBlock,
                     condition: Some(condition.trim().to_string()),
@@ -898,17 +1035,28 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        // Parse: items as item (key)
+        // Parse: items as item[, idx] [(key)]
         let as_idx = header.find(" as ").ok_or_else(|| ParseError::InvalidEachSyntax(header.clone()))?;
         let collection = header[..as_idx].trim().to_string();
         let rest = header[as_idx + 4..].trim();
 
-        let (item_name, key_name) = if let Some(paren_idx) = rest.find('(') {
-            let item = rest[..paren_idx].trim().to_string();
+        let (binding_part, key_name) = if let Some(paren_idx) = rest.find('(') {
+            let b = rest[..paren_idx].trim();
             let key = rest[paren_idx + 1..].trim_end_matches(')').trim().to_string();
-            (item, Some(key))
+            (b, Some(key))
         } else {
-            (rest.to_string(), None)
+            (rest, None)
+        };
+
+        let (item_name, index_name) = if let Some(comma_idx) = binding_part.find(',') {
+            let item = binding_part[..comma_idx].trim().to_string();
+            let idx = binding_part[comma_idx + 1..].trim();
+            (
+                item,
+                if idx.is_empty() { None } else { Some(idx.to_string()) },
+            )
+        } else {
+            (binding_part.to_string(), None)
         };
 
         let mut children = Vec::new();
@@ -919,6 +1067,7 @@ impl<'a> Parser<'a> {
                     node_type: NodeType::EachBlock,
                     collection: Some(collection),
                     item_name: Some(item_name),
+                    index_name,
                     key_name,
                     children,
                     line: start_line,

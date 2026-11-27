@@ -1,7 +1,7 @@
 # ⚡ Zvelte (Zig) vs. Rustby (Rust) — Comprehensive Benchmark & Technical Comparison
 
 > [!NOTE]
-> **Historical Migration Record:** Following this benchmark evaluation, Zvelte officially adopted the Rust engine as its primary compiler core starting in `v0.0.5` (see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for current `v0.0.6` benchmarks).
+> **Historical Migration Record:** Following this benchmark evaluation, Zvelte officially adopted the Rust engine as its primary compiler core starting in `v0.0.5` (see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for current `v0.0.9` benchmarks).
 
 > **Benchmark Version:** v0.0.4  
 > **Environment:** Linux x86_64 | Python 3.10+ | Zig 0.17.1 | Rustc 1.100.0  

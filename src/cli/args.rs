@@ -6,7 +6,7 @@ use crate::semantic::analyzer::analyze;
 use crate::compiler::codegen::build_project;
 use crate::devserver::server::DevServer;
 
-pub const VERSION: &str = "0.0.8";
+pub const VERSION: &str = "0.0.9";
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.len() < 2 {

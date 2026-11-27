@@ -72,7 +72,7 @@ def greeting(user):
         let src = r#"
 <script>
 let count = 0;
-let title = "Svelte Style in Rustby";
+let title = "Svelte Style in Zvelte";
 </script>
 
 <h1>{title}</h1>

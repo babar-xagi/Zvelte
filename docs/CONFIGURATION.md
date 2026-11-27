@@ -84,6 +84,7 @@ source_maps = true
 | `[python] enabled` | bool | `true` | Enables Python configuration. |
 | `[python] executable` | string | `"python3"` | CPython binary invoked by `zvelte dev` (automatically falls back to `python3` / `python`). |
 | `[python] execution` | string | `"server"` | Always host-side CPython worker. |
+| `[python] version` | string | `"3.10+"` | Optional version hint (updates `toolchain.python`). |
 | `[python] rust_acceleration` | bool | `true` | Links optional compiled native shared libraries into Python via `ctypes`. |
 | `[toolchain] python` / `rust` | string | `"3.10+"` / `"1.80+"` | Informational version requirements. |
 
@@ -128,8 +129,8 @@ source_maps = true
 | `output` / `out_dir` | string | `"dist"` | Directory where `zvelte build` writes production artifacts (`zvelte clean` removes this directory). |
 | `cache` | string | `".zvelte"` | Cache directory removed on `zvelte clean`. |
 | `optimization` | string | `"release"` | Build optimization label. |
-| `minify` | bool | `false` | Reserved option flag for future minification pass. |
-| `source_maps` | bool | `true` | Source map configuration flag. |
+| `minify` | bool | `false` | Strips blank lines, comments, and leading whitespace in built HTML/CSS/JS outputs when `true`. |
+| `source_maps` | bool | `true` | Reserved flag for planned source-map generation (`ROADMAP.md`). |
 
 > [!NOTE]
 > `#` comments inside TOML files work at line starts and unquoted value ends while preserving literal `#` characters inside single- or double-quoted strings (e.g. `name = "Brand #1"`). Legacy `[zig]` / `zig_acceleration` keys are also accepted for backward compatibility.

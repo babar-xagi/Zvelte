@@ -51,7 +51,7 @@ Top-level literal assignments in `<script lang="python">` (e.g., `name = "Babar"
 Runtime server expressions (e.g., `GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")` or `db = connect(...)`) are intentionally **skipped** from client state extraction so server secrets and Python APIs never leak into browser `app.js`.
 
 ### Python RPC Bridge (`POST /api/rpc`)
-Top-level `def fn(...)` / `async def fn(...)` declarations in `<script lang="python">` automatically expose matching `async function fn(...args)` proxies in browser JavaScript, returning Promises resolved seamlessly by `{fn(...)}` text bindings and `.then(...)` event callbacks.
+Top-level `def fn(...)` / `async def fn(...)` declarations in `<script lang="python">` automatically expose matching `async function fn(...args)` proxies in browser JavaScript. Python `async def` coroutines run automatically via `asyncio.run(...)` inside `worker.py`, event assignments like `click={summary = get_info()}` automatically `await` direct RPC results before updating DOM state, and `.then(...)` chains remain fully supported.
 
 ---
 
@@ -70,6 +70,19 @@ todos: []string = ["Learn Python", "Build with Zvelte"]
 
 **Supported Types:** `i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `string`, `any`, `list`, `dict`, `object`, `array`, and slice annotations like `[]string`, `[]i32`.
 
+### Reactive Computed Values (`$:`)
+Inside client `<script>` blocks, declare Svelte-style reactive derived values and stateful helpers:
+
+```html
+<script>
+let count = 1;
+$: doubled = count * 2;
+function inc() { count += 1; }
+</script>
+
+<button on:click={inc}>Double of {count} is {doubled}</button>
+```
+
 ---
 
 ## 🌳 3. Template Markup, Directives & Comments
@@ -83,17 +96,20 @@ Standard HTML comments `<!-- ... -->` are skipped cleanly at root level, inside 
 <div class={active_class}>Count: {count}</div>
 ```
 
-### Event Handlers (`event={expression}`)
-Supported events: `click`, `input`, `change`, `submit`, `keydown`, `keyup`:
+### Event Handlers (`click={...}`, `on:event|modifier={...}`, `onevent={...}`)
+Supported events include `click`, `input`, `change`, `submit`, `keydown`, `keyup`, `focus`, `blur`, `mouseenter`, and `mouseleave`, with optional modifiers `|preventDefault`, `|stopPropagation`, and `|once`:
 ```html
-<button click={count++}>Increment</button>
-<button click={selected_model = "gemini"}>Gemini</button>
+<button on:click={inc}>Increment</button>
+<button onclick={() => selected_model = "gemini"}>Gemini</button>
+<form on:submit|preventDefault={submit_form()}><button type="submit">Go</button></form>
 ```
 
-### Conditional Rendering (`{#if}` / `{:else}` / `{/if}`)
+### Conditional Rendering (`{#if}` / `{:else if}` / `{:else}` / `{/if}`)
 ```html
-{#if count > 5}
-    <p class="highlight">High count!</p>
+{#if count > 10}
+    <p class="highlight">Very high count!</p>
+{:else if count > 5}
+    <p>Medium count.</p>
 {:else}
     <p>Low count.</p>
 {/if}
@@ -105,9 +121,9 @@ Supported events: `click`, `input`, `change`, `submit`, `keydown`, `keyup`:
     <div class="task">{todo}</div>
 {/each}
 
-<!-- With optional key syntax -->
-{#each todos as todo (todo.id)}
-    <div class="task">{todo.title}</div>
+<!-- With optional index and key syntax -->
+{#each todos as todo, idx (todo.id)}
+    <div class="task">{idx + 1}. {todo.title}</div>
 {/each}
 ```
 

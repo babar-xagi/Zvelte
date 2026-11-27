@@ -21,7 +21,7 @@ zvelte <command> [path]
 | `zvelte build` | `[path]` | Compiles production assets into `[build] output` (default: `dist/`). |
 | `zvelte dev` | `[path]` | Starts the Rust HTTP dev server with port fallback, hot reload watching, and CPython RPC supervisor. |
 | `zvelte clean` | `[path]` | Removes configured build output, cache (`.zvelte/`), and legacy `.rustby/` while preserving source files. |
-| `zvelte --version` | None | Prints `zvelte version 0.0.8`. |
+| `zvelte --version` | None | Prints `zvelte version 0.0.9`. |
 | `zvelte --help` | None | Displays usage help. |
 
 ---
@@ -36,10 +36,10 @@ Scaffolds a workspace conforming strictly to the **Two-File Contract**:
 
 ### `zvelte check [path]`
 - Parses `[path]/app.toml` and the configured entry component.
-- Validates mode compatibility (`python`, `rust`, `hybrid`), `<state>` types and uniqueness, `bind:*` targets, `{#each}` collections, and identifiers inside event/`{#if}` expressions.
+- Validates mode compatibility (`python`, `rust`, `hybrid`), `<state>` types and uniqueness, `$:` derived declarations, `bind:*` targets, `{#each}` collections/index scopes, and identifiers inside event/`{#if}`/`{#each}`/`{expr}` expressions.
 
 ### `zvelte build [path]`
-Writes production artifacts to `[build] output` (default `dist/`):
+Writes production artifacts to `[build] output` (default `dist/`), honoring `[build] minify = true`:
 - `index.html`: HTML5 shell with injected `<style>` CSS (including unified Tailwind / UnoCSS Preflight, shortcuts, and utility/attributify rules when used; no dev reload script). CLI output prints exact byte size and compiled Tailwind/UnoCSS rule counts.
 - `app.js`: Scoped fine-grained DOM runtime and `POST /api/rpc` client proxies.
 - `worker.py`: Standalone CPython stdio JSON-RPC worker (emitted when Python server or native Rust scripts exist).

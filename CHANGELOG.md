@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.9] - 2026-11-27
+
+### ⚛️ Svelte-Parity Reactivity, 🐍 Async Python RPC & 🧹 Full Audit Hardening
+- **Reactive `$:` Derived Declarations ([parser.rs](src/source/parser.rs), [js_codegen.rs](src/compiler/js_codegen.rs)):** Added parsing and automatic recomputation (`__recompute_derived()`) inside `update()` (with re-entrancy guard `__updating`) for `$: doubled = count * 2;`-style reactive statements.
+- **Compiled Client `<script>` Reactivity:** Hoisted client `<script>` literal state declarations cleanly, rewritten non-shadowed state references inside helper functions/arrow functions to `state.*`, and auto-triggered `update()` after state-mutating helper execution.
+- **Python `async def` Coroutine Execution & Direct Event `await` ([codegen.rs](src/compiler/codegen.rs), [js_codegen.rs](src/compiler/js_codegen.rs)):** Added `asyncio.run(...)` detection (`inspect.iscoroutine(res)`) inside `worker.py` so Python `async def` functions execute cleanly over JSON-RPC, and automatically `await` unchained RPC calls inside DOM event handlers so assigned `state.*` holds the resolved value (not a pending `Promise`) while keeping `.then(...)` chains intact.
+- **Standard Svelte Event Syntax & Modifiers:** Support `on:click`, `onclick`, and `click` (across `click`, `input`, `change`, `submit`, `keydown`, `keyup`, `focus`, `blur`, `mouseenter`, `mouseleave`), bare function callbacks (`on:click={increment}`), arrow closures (`onclick={() => ...}`), and modifiers (`|preventDefault`, `|stopPropagation`, `|once`).
+- **Control Flow & Style Upgrades:** Added `{:else if ...}` branches, `{#each list as item, idx (key)}` comma index variable extraction (with scoped local protection so `item`/`idx` are never mis-prefixed with `state.`), `<style lang="css">` attribute handling + multiple `<style>` block merging, and complete HTML5 void elements.
+- **Full Template Semantic Checks & Working `[build] minify` ([analyzer.rs](src/semantic/analyzer.rs)):** Extended semantic validation cleanly to `{expr}` dynamic text and attribute bindings (supporting backtick template interpolations and `(a, b) =>` arrow parameters), added `[python] version` TOML key parsing, and wired `[build] minify = true` in production builds.
+- **Test Suite:** Expanded to **31 passing tests** (`2` library unit tests + `29` integration tests).
+
+---
+
 ## [0.0.8] - 2026-11-25
 
 ### ⚡ Full Built-In Zero-Dependency UnoCSS Engine
